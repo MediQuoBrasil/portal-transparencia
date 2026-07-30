@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel Financeiro — MediQuo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css">
+
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════
+       LOGIN SCREEN
+       ═══════════════════════════════════════════════════════ -->
+
+  <div class="login-screen" id="loginScreen">
+    <div class="login-card">
+      <div class="login-logo">📊</div>
+      <div class="login-title">Painel Financeiro</div>
+      <div class="login-subtitle">MediQuo — Pega Plantão</div>
+
+      <div class="login-error" id="loginError"></div>
+
+      <!-- GIS renderiza o botão automaticamente via One Tap.
+           Fallback: botão estático do Google -->
+      <div id="g_id_onload"
+           data-client_id="SEU_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
+           data-callback="__handleGoogleCredential"
+           data-auto_select="true"
+           data-use_fedcm_for_prompt="true">
+      </div>
+      <div class="g_id_signin"
+           data-type="standard"
+           data-shape="pill"
+           data-theme="outline"
+           data-text="signin_with"
+           data-size="large"
+           data-width="300">
+      </div>
+
+      <div class="login-divider">Acesso restrito a usuários autorizados</div>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════
+       APP SHELL
+       ═══════════════════════════════════════════════════════ -->
+
+  <div class="app-shell" id="appShell">
+
+    <!-- Overlay da sidebar (mobile) -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- ─── Sidebar ──────────────────────────────────── -->
+    <aside class="sidebar" id="sidebar">
+
+      <div class="sidebar-header">
+        <div class="sidebar-logo">📊</div>
+        <div class="sidebar-brand">
+          <span class="sidebar-brand-title">Painel Financeiro</span>
+          <span class="sidebar-brand-subtitle">MediQuo — Pega Plantão</span>
+        </div>
+      </div>
+
+      <!-- Seletor de ano -->
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Ano</div>
+        <div class="year-selector" id="yearSelector">
+          <!-- Renderizado via JS -->
+        </div>
+      </div>
+
+      <!-- Lista de meses -->
+      <div class="sidebar-section">
+        <div class="sidebar-section-title">Vigência</div>
+        <ul class="month-list" id="monthList">
+          <!-- Renderizado via JS -->
+        </ul>
+      </div>
+
+      <!-- Rodapé da sidebar: info do usuário -->
+      <div class="sidebar-footer">
+        <div class="user-avatar" id="userAvatar">?</div>
+        <div class="user-info">
+          <div class="user-name" id="userName">—</div>
+          <div class="user-role" id="userRole">—</div>
+        </div>
+        <button type="button" class="btn-logout" id="btnLogout" title="Sair">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round"
+               stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- ─── Conteúdo principal ────────────────────────── -->
+    <div class="main-content">
+
+      <header class="main-header">
+        <div>
+          <button type="button" class="mobile-toggle" id="mobileToggle">☰</button>
+        </div>
+        <div>
+          <div class="main-header-title" id="mainHeaderTitle">Selecione uma vigência</div>
+          <div class="main-header-subtitle" id="mainHeaderSubtitle"></div>
+        </div>
+        <div><!-- Espaço reservado para ações futuras --></div>
+      </header>
+
+      <main class="main-body" id="mainBody">
+        <div class="card">
+          <div class="vigencia-placeholder">
+            <div class="vigencia-placeholder-icon">👈</div>
+            <div class="vigencia-placeholder-title">Selecione uma vigência</div>
+            <div class="vigencia-placeholder-text">
+              Escolha um ano e mês na barra lateral para visualizar os dados da vigência.
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════
+       LOADING OVERLAY
+       ═══════════════════════════════════════════════════════ -->
+
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner spinner-lg"></div>
+    <div class="loading-text">Carregando...</div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════
+       SCRIPTS
+       ═══════════════════════════════════════════════════════ -->
+
+  <!-- Callback global para o data-callback do GIS (atributo HTML) -->
+  <script>
+    function __handleGoogleCredential(response) {
+      if (window.Auth && window.Auth.init) {
+        // Se Auth já está carregado, o callback do IIFE cuida.
+        // Mas como fallback, chamamos diretamente:
+      }
+      // O GIS usa o callback definido no initialize(),
+      // este é apenas um bridge para o atributo data-callback.
+      // Na prática, o handleCredentialResponse do auth.js será usado.
+    }
+  </script>
+
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/vigencias.js"></script>
+  <script src="js/app.js"></script>
+
+  <script>
+    // Iniciar autenticação quando DOM e GIS estiverem prontos
+    (function () {
+      'use strict';
+
+      /**
+       * Aguarda o carregamento do Google Identity Services
+       * e depois inicializa o módulo de autenticação.
+       */
+      const boot = () => {
+        if (window.google && window.google.accounts && window.google.accounts.id) {
+          window.Auth.init();
+        } else {
+          // GIS ainda não carregou — retry com polling limitado
+          let tentativas = 0;
+          const MAX_TENTATIVAS = 20;
+
+          const poll = setInterval(() => {
+            tentativas += 1;
+            if (window.google && window.google.accounts && window.google.accounts.id) {
+              clearInterval(poll);
+              window.Auth.init();
+            } else if (tentativas >= MAX_TENTATIVAS) {
+              clearInterval(poll);
+              console.error('[Boot] Google Identity Services não carregou após timeout.');
+              const loginError = document.getElementById('loginError');
+              if (loginError) {
+                loginError.textContent = 'Erro ao carregar serviço de autenticação. Recarregue a página.';
+                loginError.classList.add('show');
+              }
+            }
+          }, 500);
+        }
+      };
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot);
+      } else {
+        boot();
+      }
+    })();
+  </script>
+
+</body>
+</html>
