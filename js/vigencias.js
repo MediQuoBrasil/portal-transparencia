@@ -445,26 +445,82 @@
   /** @type {'alfa'|'horas'} */
   let sortMode = 'alfa';
 
+  /** SVG chevron-right icon reusable string */
+  const CHEVRON_SVG = `<svg class="prof-chevron" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+    stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
+
   /**
-   * Gera o HTML de uma linha de profissional na tabela.
+   * Gera o HTML de detalhe de plantões de um profissional (sub-tabela).
+   *
+   * @param {Profissional} p - Profissional.
+   * @returns {string} HTML das linhas internas do detalhe.
+   */
+  const renderProfDetail = (p) => {
+    const rows = p.plantoes.map((pl) => `
+      <tr>
+        <td>${window.Utils.escapeHtml(pl.inicio)}</td>
+        <td>${window.Utils.escapeHtml(pl.fim)}</td>
+        <td>${window.Utils.escapeHtml(pl.duracaoStr)}</td>
+        <td>${window.Utils.formatarMoeda(pl.valor)}</td>
+      </tr>
+    `).join('');
+
+    return `
+      <table class="prof-detail-table">
+        <thead><tr>
+          <th>Início</th>
+          <th>Fim</th>
+          <th>Duração</th>
+          <th>Valor R$</th>
+        </tr></thead>
+        <tbody>
+          ${rows}
+          <tr class="prof-detail-total">
+            <td colspan="2">Total — ${p.totalPlantoes} plantão(ões)</td>
+            <td>${window.Utils.formatarTotalHoras(p.totalHoras)}</td>
+            <td>${window.Utils.formatarMoeda(p.totalValor)}</td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+  };
+
+  /**
+   * Gera o HTML de uma linha de profissional na tabela, com sub-row
+   * de detalhe expansível.
    *
    * @param {Profissional} p - Profissional.
    * @param {string} horasPct - Porcentagem de horas já formatada.
    * @param {string} valorPct - Porcentagem de valor já formatada.
-   * @returns {string} HTML da linha (tr).
+   * @param {number} idx - Índice para atributo data-prof-idx.
+   * @returns {string} HTML da linha (tr) + detail row.
    */
-  const renderProfRow = (p, horasPct, valorPct) => {
+  const renderProfRow = (p, horasPct, valorPct, idx) => {
     const nome = window.Utils.escapeHtml(p.nome);
     const crm = window.Utils.escapeHtml(p.crm);
     const horas = window.Utils.formatarTotalHoras(p.totalHoras);
     const valor = window.Utils.formatarMoeda(p.totalValor);
 
     return `
-      <tr class="prof-row">
-        <td class="prof-cell-name"><span class="prof-dot"></span>${nome}</td>
+      <tr class="prof-row" data-prof-idx="${idx}">
+        <td class="prof-cell-name">
+          <span class="prof-dot"></span>
+          <span class="prof-name-text">${nome}</span>
+          ${CHEVRON_SVG}
+        </td>
         <td class="prof-cell-crm">${crm}</td>
         <td class="prof-cell-metric"><span class="prof-metric-val">${horas}</span><span class="prof-pct">${horasPct}</span></td>
         <td class="prof-cell-metric prof-cell-valor"><span class="prof-metric-val">${valor}</span><span class="prof-pct">${valorPct}</span></td>
+      </tr>
+      <tr class="prof-detail-row" data-prof-detail="${idx}">
+        <td colspan="4">
+          <div class="prof-detail-wrap">
+            <div class="prof-detail-inner">
+              ${renderProfDetail(p)}
+            </div>
+          </div>
+        </td>
       </tr>
     `;
   };
@@ -496,17 +552,288 @@
     );
 
     tbody.innerHTML = sorted
-      .map((p, i) => renderProfRow(p, horasPcts[i], valorPcts[i]))
+      .map((p, i) => renderProfRow(p, horasPcts[i], valorPcts[i], i))
       .join('');
 
     // Atualizar estado visual dos botões
     document.querySelectorAll('.sort-btn').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.sort === sortMode);
     });
+
+    // Re-bind expand/collapse on professional rows
+    bindProfToggle();
   };
 
   /**
-   * Renderiza o preview completo: métricas, profissionais, botões de download.
+   * Vincula eventos de expand/collapse nas linhas de profissionais.
+   */
+  const bindProfToggle = () => {
+    document.querySelectorAll('.prof-row[data-prof-idx]').forEach((row) => {
+      row.addEventListener('click', () => {
+        const idx = row.dataset.profIdx;
+        const detail = document.querySelector(`.prof-detail-row[data-prof-detail="${idx}"]`);
+        const wasOpen = row.classList.contains('expanded');
+
+        // Fechar todos
+        document.querySelectorAll('.prof-row.expanded').forEach((r) => {
+          r.classList.remove('expanded');
+        });
+        document.querySelectorAll('.prof-detail-row.open').forEach((r) => {
+          r.classList.remove('open');
+        });
+
+        // Abrir o clicado (se não estava aberto)
+        if (!wasOpen && detail) {
+          row.classList.add('expanded');
+          detail.classList.add('open');
+        }
+      });
+    });
+  };
+
+  // ─── Days card helpers ──────────────────────────────────
+
+  /** SVG chevron for day rows */
+  const DIA_CHEVRON_SVG = `<svg class="dia-chevron" viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" stroke-width="2" stroke-linecap="round"
+    stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>`;
+
+  /**
+   * Agrupa todos os plantões por data, calcula subtotais por dia.
+   *
+   * @param {DadosRelatorio} dados - Dados parseados.
+   * @returns {{ ordemDias: string[], gruposPorDia: Object<string, Object[]>, totaisPorDia: Object<string, { horas: number, valor: number }> }}
+   */
+  const agruparPorDia = (dados) => {
+    /** @type {Object<string, Object[]>} */
+    const gruposPorDia = {};
+    /** @type {string[]} */
+    const ordemDias = [];
+
+    dados.profissionais.forEach((prof) => {
+      prof.plantoes.forEach((pl) => {
+        const data = window.Utils.extrairData(pl.inicio);
+        if (!gruposPorDia[data]) {
+          gruposPorDia[data] = [];
+          ordemDias.push(data);
+        }
+        gruposPorDia[data].push({
+          profissional: prof.nome,
+          inicio: pl.inicio,
+          fim: pl.fim,
+          duracaoStr: pl.duracaoStr,
+          duracaoHoras: pl.duracaoHoras,
+          valor: pl.valor,
+        });
+      });
+    });
+
+    // Ordenar dias cronologicamente
+    ordemDias.sort((a, b) => {
+      const da = window.Utils.dataParaSort(a);
+      const db = window.Utils.dataParaSort(b);
+      return da - db;
+    });
+
+    // Calcular totais por dia
+    /** @type {Object<string, { horas: number, valor: number }>} */
+    const totaisPorDia = {};
+    ordemDias.forEach((dia) => {
+      let horas = 0;
+      let valor = 0;
+      gruposPorDia[dia].forEach((p) => {
+        horas += p.duracaoHoras;
+        valor += p.valor;
+      });
+      totaisPorDia[dia] = { horas, valor };
+    });
+
+    return { ordemDias, gruposPorDia, totaisPorDia };
+  };
+
+  /**
+   * Gera o HTML do detalhe expandido de um dia (quais profissionais atuaram).
+   *
+   * @param {Object[]} plantoesDia - Plantões do dia.
+   * @param {{ horas: number, valor: number }} totais - Totais do dia.
+   * @returns {string} HTML.
+   */
+  const renderDiaDetail = (plantoesDia, totais) => {
+    // Ordenar por profissional
+    const sorted = [...plantoesDia].sort((a, b) =>
+      a.profissional.localeCompare(b.profissional, 'pt-BR'),
+    );
+
+    const rows = sorted.map((p) => `
+      <tr>
+        <td>${window.Utils.escapeHtml(p.profissional)}</td>
+        <td>${window.Utils.escapeHtml(p.inicio)}</td>
+        <td>${window.Utils.escapeHtml(p.fim)}</td>
+        <td>${window.Utils.escapeHtml(p.duracaoStr)}</td>
+        <td>${window.Utils.formatarMoeda(p.valor)}</td>
+      </tr>
+    `).join('');
+
+    return `
+      <table class="dia-detail-table">
+        <thead><tr>
+          <th>Profissional</th>
+          <th>Início</th>
+          <th>Fim</th>
+          <th>Duração</th>
+          <th>Valor R$</th>
+        </tr></thead>
+        <tbody>
+          ${rows}
+          <tr class="dia-detail-total">
+            <td>Total — ${sorted.length} plantão(ões)</td>
+            <td colspan="2"></td>
+            <td>${window.Utils.formatarTotalHoras(totais.horas)}</td>
+            <td>${window.Utils.formatarMoeda(totais.valor)}</td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+  };
+
+  /**
+   * Gera uma linha de dia na tabela de dias + sub-row com detalhe expansível.
+   *
+   * @param {string} dia - Data "DD/MM/AAAA".
+   * @param {{ horas: number, valor: number }} totais - Totais do dia.
+   * @param {string} horasPct - Porcentagem de horas formatada.
+   * @param {string} valorPct - Porcentagem de valor formatada.
+   * @param {number} idx - Índice do dia.
+   * @param {Object[]} plantoesDia - Plantões do dia.
+   * @returns {string} HTML.
+   */
+  const renderDiaRow = (dia, totais, horasPct, valorPct, idx, plantoesDia) => {
+    const horas = window.Utils.formatarTotalHoras(totais.horas);
+    const valor = window.Utils.formatarMoeda(totais.valor);
+
+    return `
+      <tr class="dia-row" data-dia-idx="${idx}">
+        <td class="dia-cell-data">
+          <span class="dia-dot"></span>
+          <span class="dia-data-text">${window.Utils.escapeHtml(dia)}</span>
+          ${DIA_CHEVRON_SVG}
+        </td>
+        <td class="dia-cell-metric"><span class="dia-metric-val">${horas}</span><span class="dia-pct">${horasPct}</span></td>
+        <td class="dia-cell-metric dia-cell-valor"><span class="dia-metric-val">${valor}</span><span class="dia-pct">${valorPct}</span></td>
+      </tr>
+      <tr class="dia-detail-row" data-dia-detail="${idx}">
+        <td colspan="3">
+          <div class="dia-detail-wrap">
+            <div class="dia-detail-inner">
+              ${renderDiaDetail(plantoesDia, totais)}
+            </div>
+          </div>
+        </td>
+      </tr>
+    `;
+  };
+
+  /**
+   * Gera o HTML do card de Dias da Vigência.
+   *
+   * @param {DadosRelatorio} dados - Dados parseados.
+   * @returns {string} HTML.
+   */
+  const renderDiasCard = (dados) => {
+    const { ordemDias, gruposPorDia, totaisPorDia } = agruparPorDia(dados);
+
+    if (ordemDias.length === 0) return '';
+
+    const horasPcts = window.Utils.distribuirPorcentagens(
+      ordemDias.map((d) => totaisPorDia[d].horas),
+      dados.totalGeral.horas,
+    );
+    const valorPcts = window.Utils.distribuirPorcentagens(
+      ordemDias.map((d) => totaisPorDia[d].valor),
+      dados.totalGeral.valor,
+    );
+
+    const diaRowsHtml = ordemDias
+      .map((dia, i) => renderDiaRow(
+        dia,
+        totaisPorDia[dia],
+        horasPcts[i],
+        valorPcts[i],
+        i,
+        gruposPorDia[dia],
+      ))
+      .join('');
+
+    return `
+      <div class="card card--dias">
+        <div class="card-header-row">
+          <div class="card-title">Dias da Vigência</div>
+          <div class="sort-group" role="group" aria-label="Info">
+            <span class="sort-btn active" style="cursor: default;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              ${ordemDias.length} dias
+            </span>
+          </div>
+        </div>
+
+        <div class="dia-table-wrap">
+          <table class="dia-table">
+            <thead>
+              <tr>
+                <th class="dia-th-data">Data</th>
+                <th class="dia-th-metric">Horas</th>
+                <th class="dia-th-metric">Valor</th>
+              </tr>
+            </thead>
+            <tbody id="diaTbody">
+              ${diaRowsHtml}
+              <tr class="dia-totals-row">
+                <td class="dia-totals-label">Total geral</td>
+                <td class="dia-cell-metric"><span class="dia-metric-val">${window.Utils.formatarTotalHoras(dados.totalGeral.horas)}</span></td>
+                <td class="dia-cell-metric dia-cell-valor"><span class="dia-metric-val">${window.Utils.formatarMoeda(dados.totalGeral.valor)}</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  };
+
+  /**
+   * Vincula eventos de expand/collapse nas linhas de dias.
+   */
+  const bindDiaToggle = () => {
+    document.querySelectorAll('.dia-row[data-dia-idx]').forEach((row) => {
+      row.addEventListener('click', () => {
+        const idx = row.dataset.diaIdx;
+        const detail = document.querySelector(`.dia-detail-row[data-dia-detail="${idx}"]`);
+        const wasOpen = row.classList.contains('expanded');
+
+        // Fechar todos
+        document.querySelectorAll('.dia-row.expanded').forEach((r) => {
+          r.classList.remove('expanded');
+        });
+        document.querySelectorAll('.dia-detail-row.open').forEach((r) => {
+          r.classList.remove('open');
+        });
+
+        // Abrir o clicado (se não estava aberto)
+        if (!wasOpen && detail) {
+          row.classList.add('expanded');
+          detail.classList.add('open');
+        }
+      });
+    });
+  };
+
+  /**
+   * Renderiza o preview completo: métricas, profissionais, dias, botões de download.
    *
    * @param {Object} dados - DadosRelatorio.
    * @param {Object} [vigenciaInfo] - Info extra do backend (para botão remover).
@@ -533,8 +860,10 @@
     );
 
     const profRowsHtml = sorted
-      .map((p, i) => renderProfRow(p, horasPcts[i], valorPcts[i]))
+      .map((p, i) => renderProfRow(p, horasPcts[i], valorPcts[i], i))
       .join('');
+
+    const diasCardHtml = renderDiasCard(dados);
 
     return `
       <div class="card">
@@ -594,6 +923,8 @@
           </table>
         </div>
       </div>
+
+      ${diasCardHtml}
 
       <div class="actions-bar">
         <button class="btn btn-primary" id="btnDia" type="button">
@@ -706,6 +1037,10 @@
         reorderProfList(state.dadosRelatorio);
       });
     }
+
+    // Expandable rows
+    bindProfToggle();
+    bindDiaToggle();
   };
 
   // ─── Feedback e Progresso ───────────────────────────────
