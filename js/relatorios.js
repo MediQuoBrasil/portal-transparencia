@@ -43,7 +43,7 @@
    * @property {string} inicio - "DD/MM/AAAA"
    * @property {string} fim    - "DD/MM/AAAA"
    * @property {string} raw    - String original "DD/MM/AAAA~DD/MM/AAAA"
-   * @property {string} curta  - Formato curto "DD-MM a DD-MM"
+   * @property {string} curta  - Formato curto "DD/MM a DD/MM"
    */
 
   /**
@@ -757,8 +757,8 @@
 
       const duracaoHoras = window.Utils.duracaoParaHorasDecimal(reg.duracao_h);
       profMap[chave].plantoes.push({
-        inicio: reg.inicio,
-        fim: reg.fim,
+        inicio: window.Utils.normalizarDataHora(reg.inicio),
+        fim: window.Utils.normalizarDataHora(reg.fim),
         duracaoStr: reg.duracao_h,
         duracaoHoras,
         valor: reg.valor,
