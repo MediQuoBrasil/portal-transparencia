@@ -231,6 +231,14 @@
     const session = getSession();
 
     if (session) {
+      // Sessão existente — warmup do backend IMEDIATAMENTE
+      // Dispara GET na API para aquecer a instância do Apps Script
+      // enquanto o App.init() prepara o init_dashboard (que é POST autenticado).
+      // Economia: ~1-2s de cold-start eliminados do caminho crítico.
+      if (window.Prefetch) {
+        window.Prefetch.earlyWarmup();
+      }
+
       // Sessão existente — inicializar direto
       loginScreen.style.display = 'none';
       window.App.init({
