@@ -1,0 +1,821 @@
+/* ═══════════════════════════════════════════════════════════
+   FASE 3 — Teto, Relação de Plantões e Feriados
+   ═══════════════════════════════════════════════════════════ */
+
+
+/* ─── Teto Card ─────────────────────────────────────────── */
+
+.teto-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  margin-top: 1rem;
+}
+
+.teto-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  gap: 0.75rem;
+}
+
+.teto-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--fg-muted);
+}
+
+.teto-header-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--fg);
+  letter-spacing: -0.01em;
+}
+
+.teto-badge {
+  font-size: 0.65rem;
+  font-weight: 500;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-full);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.teto-badge--snapshot {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid var(--border-accent);
+}
+
+.teto-badge--current {
+  background: var(--success-soft);
+  color: var(--success);
+  border: 1px solid rgba(52, 211, 153, 0.20);
+}
+
+/* Teto metrics grid */
+
+.teto-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.teto-metric {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  text-align: center;
+}
+
+.teto-metric--primary {
+  border-color: var(--border-accent);
+}
+
+.teto-metric--positive .teto-metric-value {
+  color: var(--success);
+}
+
+.teto-metric--negative .teto-metric-value {
+  color: var(--danger);
+}
+
+.teto-metric-label {
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: var(--fg-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.25rem;
+}
+
+.teto-metric-value {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Progress bar */
+
+.teto-progress {
+  margin-bottom: 0.75rem;
+}
+
+.teto-progress-bar {
+  height: 4px;
+  background: var(--border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  margin-bottom: 0.35rem;
+}
+
+.teto-progress-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width var(--dur-std) var(--ease-out);
+}
+
+.teto-progress-label {
+  font-size: 0.68rem;
+  color: var(--fg-subtle);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Details row */
+
+.teto-details-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.teto-detail {
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.teto-detail-sep {
+  font-size: 0.72rem;
+  color: var(--fg-subtle);
+}
+
+/* Composição */
+
+.teto-composicao {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.teto-comp-item {
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: var(--fg-subtle);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  padding: 0.1rem 0.45rem;
+  white-space: nowrap;
+}
+
+/* Toggle detail button */
+
+.teto-toggle-detail {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.5rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  font-family: var(--font);
+  font-size: 0.72rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+
+.teto-toggle-detail:hover {
+  background: var(--surface);
+  color: var(--fg);
+  border-color: var(--border-hover);
+}
+
+.teto-chevron {
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.teto-toggle-detail.open .teto-chevron {
+  transform: rotate(180deg);
+}
+
+/* Detail table wrapper */
+
+.teto-detail-table-wrap {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height var(--dur-std) var(--ease-out);
+}
+
+.teto-detail-table-wrap.open {
+  max-height: 2000px;
+  transition: max-height 0.5s ease-in;
+}
+
+.teto-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+}
+
+.teto-detail-table thead th {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-subtle);
+  padding: 0 0.5rem 0.3rem 0;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.teto-detail-table th.num,
+.teto-detail-table td.num {
+  text-align: right;
+}
+
+.teto-detail-row td {
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  padding: 0.25rem 0.5rem 0.25rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-theme="light"] .teto-detail-row td {
+  border-bottom-color: rgba(0,0,0,0.03);
+}
+
+.teto-detail-row.teto-row--feriado td {
+  color: var(--accent);
+}
+
+.teto-feriado-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+}
+
+/* Loading/error states */
+
+.teto-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  color: var(--fg-muted);
+  font-size: 0.78rem;
+}
+
+.teto-error {
+  padding: 0.75rem 1rem;
+  color: var(--danger);
+  font-size: 0.78rem;
+  background: var(--danger-soft);
+  border-radius: var(--radius-sm);
+}
+
+
+/* ─── Relação de Plantões ───────────────────────────────── */
+
+.relacao-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.relacao-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.relacao-card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.relacao-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.relacao-total-badge {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-full);
+  padding: 0.15rem 0.55rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.relacao-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0;
+}
+
+.relacao-day-block {
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  padding: 0.75rem 1rem;
+}
+
+.relacao-day-block:last-child {
+  border-right: none;
+}
+
+.relacao-day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.relacao-day-name {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.relacao-day-total {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.relacao-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.relacao-table thead th {
+  font-size: 0.58rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-subtle);
+  padding: 0 0.4rem 0.25rem 0;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.relacao-table th.num {
+  text-align: right;
+}
+
+.relacao-row td {
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  padding: 0.2rem 0.4rem 0.2rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.02);
+  white-space: nowrap;
+}
+
+[data-theme="light"] .relacao-row td {
+  border-bottom-color: rgba(0,0,0,0.03);
+}
+
+.relacao-row td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.relacao-empty {
+  font-size: 0.72rem;
+  color: var(--fg-subtle);
+  font-style: italic;
+  padding: 0.5rem 0;
+}
+
+/* Relação editing inputs */
+
+.relacao-input {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 0.72rem;
+  padding: 0.2rem 0.35rem;
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+
+.relacao-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-dim);
+}
+
+.relacao-input--sm {
+  max-width: 100px;
+}
+
+.relacao-input--xs {
+  max-width: 56px;
+  text-align: right;
+}
+
+.relacao-remove-btn {
+  background: transparent;
+  border: none;
+  color: var(--fg-subtle);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  line-height: 1;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.relacao-remove-btn:hover {
+  color: var(--danger);
+}
+
+.relacao-add-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 0.35rem;
+  margin-top: 0.35rem;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: 4px;
+  color: var(--fg-subtle);
+  font-family: var(--font);
+  font-size: 0.68rem;
+  cursor: pointer;
+  justify-content: center;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+
+.relacao-add-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+
+/* ─── Feriados Calendar ─────────────────────────────────── */
+
+.feriados-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.feriados-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.feriados-card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.feriados-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.feriados-hint {
+  font-size: 0.72rem;
+  color: var(--fg-subtle);
+  padding: 0.5rem 1.25rem 0;
+}
+
+/* Calendar grid — 4 columns on desktop, 3 on tablet, 2 on mobile */
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  padding: 0.75rem 1rem;
+}
+
+.cal-month {
+  padding: 0.5rem;
+}
+
+.cal-month-name {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--fg);
+  text-align: center;
+  margin-bottom: 0.35rem;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+}
+
+.cal-day-header {
+  font-size: 0.55rem;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  text-align: center;
+  padding: 0.15rem 0;
+  text-transform: uppercase;
+}
+
+.cal-day {
+  position: relative;
+  font-size: 0.65rem;
+  color: var(--fg-muted);
+  text-align: center;
+  padding: 0.3rem 0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+  user-select: none;
+  line-height: 1;
+}
+
+.cal-day--empty {
+  cursor: default;
+}
+
+.cal-day:not(.cal-day--empty):hover {
+  background: var(--surface-hover);
+  color: var(--fg);
+}
+
+.cal-day--fds {
+  color: var(--fg-subtle);
+}
+
+.cal-day--hoje {
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.cal-day--feriado {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.cal-day--feriado:hover {
+  background: var(--accent-dim);
+}
+
+/* Purple dot indicator */
+
+.cal-dot {
+  position: absolute;
+  bottom: 1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* Feriados list */
+
+.feriados-list-section {
+  border-top: 1px solid var(--border);
+  padding: 0.75rem 1.25rem 1rem;
+}
+
+.feriados-list-title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--fg-muted);
+  margin-bottom: 0.5rem;
+}
+
+.feriados-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.feriado-list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 4px;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.feriado-list-item:hover {
+  background: var(--surface);
+}
+
+.feriado-list-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.feriado-list-date {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  min-width: 6em;
+}
+
+.feriado-list-desc {
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feriado-remove-btn {
+  background: transparent;
+  border: none;
+  color: var(--fg-subtle);
+  font-size: 0.88rem;
+  cursor: pointer;
+  padding: 0 0.15rem;
+  line-height: 1;
+  transition: color var(--dur-fast) var(--ease-out);
+  flex-shrink: 0;
+}
+
+.feriado-remove-btn:hover {
+  color: var(--danger);
+}
+
+
+/* ─── Shared button utilities for Fase 3 ─────────────────── */
+
+.btn--sm {
+  padding: 0.3rem 0.65rem;
+  font-size: 0.72rem;
+  border-radius: 6px;
+}
+
+.btn--ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-family: var(--font);
+  font-weight: 500;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+
+.btn--ghost:hover {
+  background: var(--surface);
+  color: var(--fg);
+  border-color: var(--border-hover);
+}
+
+.btn--accent {
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  font-family: var(--font);
+  font-weight: 500;
+  box-shadow: var(--shadow-glow);
+  transition: all var(--dur-fast) var(--ease-out);
+}
+
+.btn--accent:hover {
+  background: var(--accent-bright);
+}
+
+/* ─── Section navigation for teto/feriados/relacao ──────── */
+
+.section-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.section-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.65rem 1rem;
+  font-family: var(--font);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--fg-muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+
+.section-tab:hover {
+  color: var(--fg);
+  background: var(--surface);
+}
+
+.section-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.section-panel {
+  display: none;
+}
+
+.section-panel.active {
+  display: block;
+}
+
+
+/* ─── Responsive adjustments for Fase 3 ──────────────────── */
+
+@media (max-width: 900px) {
+  .calendar-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .teto-metrics {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .calendar-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .relacao-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .relacao-card-header {
+    padding: 0.75rem;
+  }
+
+  .relacao-day-block {
+    border-right: none;
+  }
+
+  .feriados-card-header {
+    padding: 0.75rem;
+  }
+
+  .feriados-list-section {
+    padding: 0.5rem 0.75rem 0.75rem;
+  }
+
+  .teto-card {
+    padding: 0.75rem;
+  }
+
+  .section-tabs {
+    padding: 0 0.5rem;
+  }
+}
