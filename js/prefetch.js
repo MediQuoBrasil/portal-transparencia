@@ -5,19 +5,21 @@
  *
  *  Estratégia de 3 camadas para eliminar espera percebida:
  *
- *  1. WARMUP ANTECIPADO (antes do login):
- *     Se existe sessão no sessionStorage, faz GET na URL da API
- *     para aquecer a instância do Apps Script (~1-2s cold-start)
- *     ANTES mesmo do Google Identity Services carregar.
+ *  1. WARMUP INCONDICIONAL (no carregamento do script):
+ *     Dispara GET na URL da API IMEDIATAMENTE ao carregar,
+ *     ANTES do GIS, ANTES do login. Aquece o Apps Script (~1-2s)
+ *     enquanto o usuário interage com a tela de login.
  *
  *  2. PREFETCH DO ANO ATUAL (após render inicial):
  *     Chama batch_detalhes que retorna dados de 12 vigências + teto
  *     em UMA chamada (~1.5s). Armazena cada vigência individualmente
- *     no IndexedDB → acesso instantâneo ao trocar de mês.
+ *     no IndexedDB com TTL inteligente:
+ *     - Vigências passadas: 30 dias (dados imutáveis)
+ *     - Vigência atual/futura: 2h (pode mudar)
  *
  *  3. PREFETCH DE ANOS ADJACENTES (idle time):
  *     Após o ano atual estar cacheado, prefetcha ano anterior/próximo
- *     usando requestIdleCallback para não afetar interatividade.
+ *     usando requestIdleCallback (delay 600ms entre anos).
  *
  *  Dependências:
  *  - js_config.js  (AppConfig.API_URL)
@@ -50,14 +52,17 @@
 
   /**
    * Dispara GET na URL da API para aquecer o Apps Script.
-   * Executado no boot se existe sessão — não precisa de auth.
    * Fire-and-forget: não bloqueia nada.
+   *
+   * Disparado INCONDICIONALMENTE no carregamento do script,
+   * ANTES do GIS e ANTES do login. Economia: elimina ~1-2s de
+   * cold-start do caminho crítico do primeiro init_dashboard.
    */
   const earlyWarmup = () => {
     if (state.warmupFired) return;
     state.warmupFired = true;
 
-    const apiUrl = window.AppConfig.API_URL;
+    const apiUrl = window.AppConfig?.API_URL;
     if (!apiUrl || apiUrl.includes('SEU_DEPLOY_ID')) return;
 
     // GET é público (doGet retorna status)
@@ -66,6 +71,9 @@
       // Falha silenciosa — warmup é best-effort
     });
   };
+
+  // Disparar warmup imediatamente ao carregar o script (antes de tudo)
+  earlyWarmup();
 
   // ─── 2. Prefetch batch de vigências ─────────────────────────
 
@@ -91,19 +99,24 @@
       if (!cache) return false;
 
       // Armazenar cada vigência individualmente no cache frontend
-      // Usa a mesma chave que detalhe_completo usaria
+      // Usa a mesma chave que detalhe_completo usaria.
+      // Vigências passadas recebem TTL de 30 dias (dados imutáveis).
+      const ttlPersistente = cache.TTL?.PERSISTENTE;
+
       const promises = Object.entries(detalhes).map(async ([mes, data]) => {
-        const params = { ano, mes: Number(mes) };
+        const mesNum = Number(mes);
+        const params = { ano, mes: mesNum };
+        const ttlOverride = cache.isVigenciaPassada(params) ? ttlPersistente : undefined;
 
         // Cache como detalhe_completo (para servir direto ao trocar vigência)
-        await cache.set('detalhe_completo', params, { ok: true, data });
+        await cache.set('detalhe_completo', params, { ok: true, data }, ttlOverride);
 
         // Cache separado detalhe e teto (para compatibilidade)
         if (data.detalhe) {
-          await cache.set('detalhe_vigencia', params, { ok: true, data: data.detalhe });
+          await cache.set('detalhe_vigencia', params, { ok: true, data: data.detalhe }, ttlOverride);
         }
         if (data.teto) {
-          await cache.set('teto_vigencia', params, { ok: true, data: data.teto });
+          await cache.set('teto_vigencia', params, { ok: true, data: data.teto }, ttlOverride);
         }
       });
 
@@ -152,6 +165,14 @@
   };
 
   /**
+   * Delay entre prefetch de anos adjacentes (ms).
+   * 600ms: suficiente para não saturar o backend Apps Script,
+   * mas ~70% mais rápido que o anterior (2000ms).
+   * @type {number}
+   */
+  const INTER_YEAR_DELAY = 600;
+
+  /**
    * Processa a fila de prefetch usando requestIdleCallback
    * ou setTimeout como fallback.
    *
@@ -165,9 +186,9 @@
 
     const scheduleNext = (fn) => {
       if (typeof requestIdleCallback === 'function') {
-        requestIdleCallback(fn, { timeout: 5000 });
+        requestIdleCallback(fn, { timeout: 3000 });
       } else {
-        setTimeout(fn, 200);
+        setTimeout(fn, 100);
       }
     };
 
@@ -177,9 +198,8 @@
         await prefetchAno(ano);
       }
 
-      // Delay entre anos para não saturar o backend
       if (state.queue.length > 0) {
-        setTimeout(processQueue_, 2000);
+        setTimeout(processQueue_, INTER_YEAR_DELAY);
       } else {
         state.running = false;
       }
