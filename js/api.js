@@ -2,6 +2,10 @@
  * ═══════════════════════════════════════════════════════════
  *  api.js — Comunicação com o backend Apps Script
  * ═══════════════════════════════════════════════════════════
+ *
+ *  Integra cache via window.Cache (stale-while-revalidate):
+ *  - Ações de leitura: tenta cache primeiro, rede como fallback.
+ *  - Ações de escrita: rede direta + invalidação de cache.
  */
 
 (function () {
@@ -13,6 +17,7 @@
    * @property {*}       [data]  - Dados retornados
    * @property {string}  [error] - Mensagem de erro
    * @property {number}  [code]  - Código HTTP semântico
+   * @property {boolean} [fromCache] - Se veio de cache
    */
 
   /**
@@ -50,20 +55,13 @@
   };
 
   /**
-   * Determina se um código HTTP é transitório (retry-able).
-   * @param {number} status - Código HTTP.
-   * @returns {boolean}
-   */
-  const isTransient = (status) => status === 0 || status >= 500 || status === 429;
-
-  /**
-   * Envia uma requisição POST autenticada ao backend.
+   * Faz o fetch bruto ao backend (sem cache).
    *
-   * @param {string} action - Nome da ação (rota do backend).
+   * @param {string} action - Nome da ação.
    * @param {Object} [payload={}] - Dados adicionais.
    * @returns {Promise<ApiResult>}
    */
-  const request = async (action, payload = {}) => {
+  const fetchFromNetwork = async (action, payload = {}) => {
     const token = getToken();
     const body = { action, token, ...payload };
     let lastError = 'Erro de conexão com o servidor.';
@@ -76,13 +74,9 @@
           body: JSON.stringify(body),
         });
 
-        // Apps Script web apps retornam sempre 200 (mesmo erros lógicos).
-        // O JSON interno tem o campo "ok" para indicar sucesso/falha.
         const data = await response.json();
 
-        // Se o backend retornou, não é erro transitório — parar.
         if (data.ok === false && data.code === 401) {
-          // Sessão expirada → forçar logout
           window.Auth.logout();
           return { ok: false, error: 'Sessão expirada. Faça login novamente.', code: 401 };
         }
@@ -99,6 +93,56 @@
     }
 
     return { ok: false, error: lastError };
+  };
+
+  /**
+   * Envia uma requisição autenticada ao backend.
+   * Integra cache stale-while-revalidate para ações de leitura.
+   *
+   * @param {string} action - Nome da ação (rota do backend).
+   * @param {Object} [payload={}] - Dados adicionais.
+   * @returns {Promise<ApiResult>}
+   */
+  const request = async (action, payload = {}) => {
+    const cache = window.Cache;
+
+    // ── Ações de leitura: tentar cache primeiro ──
+    if (cache && cache.isCacheable(action)) {
+      const cached = await cache.get(action, payload);
+
+      if (cached) {
+        if (!cached.stale) {
+          // Cache fresco → retorna direto
+          return { ...cached.data, fromCache: true };
+        }
+
+        // Cache stale → retorna imediato E revalida em background
+        fetchFromNetwork(action, payload).then(async (networkResult) => {
+          if (networkResult.ok) {
+            await cache.set(action, payload, networkResult);
+          }
+        });
+
+        return { ...cached.data, fromCache: true };
+      }
+
+      // Sem cache → buscar da rede e armazenar
+      const networkResult = await fetchFromNetwork(action, payload);
+      if (networkResult.ok) {
+        await cache.set(action, payload, networkResult);
+      }
+      return networkResult;
+    }
+
+    // ── Ações de escrita ou não cacheáveis: rede direta ──
+    const result = await fetchFromNetwork(action, payload);
+
+    // Invalidar cache de leitura associado após escrita bem-sucedida
+    if (result.ok && cache) {
+      await cache.invalidate(action);
+    }
+
+    return result;
   };
 
   /**
