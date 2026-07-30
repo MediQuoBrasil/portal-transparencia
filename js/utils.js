@@ -22,17 +22,20 @@
   })}`;
 
   /**
-   * Formata string de vigência "DD/MM/AAAA~DD/MM/AAAA" para "DD/MM a DD/MM".
+   * Formata string de vigência "DD/MM/AAAA~DD/MM/AAAA" para "DD-MM a DD-MM".
+   * Usa hífen em vez de barra para compatibilidade com nomes de arquivo.
    *
    * @param {string} vigStr - String no formato "DD/MM/AAAA~DD/MM/AAAA".
-   * @returns {string} Formato curto (ex: "21/06 a 20/07").
+   * @returns {string} Formato curto (ex: "21-06 a 20-07").
    */
   const formatarVigenciaCurta = (vigStr) => {
     const partes = vigStr.split('~');
     if (partes.length !== 2) return vigStr;
     const ini = partes[0].trim();
     const fim = partes[1].trim();
-    return `${ini.substring(0, 5)} a ${fim.substring(0, 5)}`;
+    const iniCurto = ini.substring(0, 5).replace(/\//g, '-');
+    const fimCurto = fim.substring(0, 5).replace(/\//g, '-');
+    return `${iniCurto} a ${fimCurto}`;
   };
 
   /**
