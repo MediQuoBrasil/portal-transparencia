@@ -773,6 +773,223 @@
 }
 
 
+/* ─── Alterado dot (teto detail) ────────────────────────── */
+
+.teto-alterado-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning, #F59E0B);
+  vertical-align: middle;
+  margin-left: 2px;
+}
+
+.teto-row--alterado td {
+  color: var(--warning, #F59E0B);
+}
+
+
+/* ─── Alterações de Escala ─────────────────────────────── */
+
+.alt-card {
+  padding: 0;
+  overflow: hidden;
+  margin-top: 1rem;
+}
+
+.alt-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.alt-card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.alt-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.alt-hint {
+  font-size: 0.72rem;
+  color: var(--fg-subtle);
+  padding: 0.5rem 1.25rem 0;
+  line-height: 1.4;
+}
+
+.alt-list {
+  padding: 0.5rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.alt-list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.alt-list-item:hover {
+  background: var(--surface);
+}
+
+.alt-list-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning, #F59E0B);
+  flex-shrink: 0;
+}
+
+.alt-list-info {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.alt-list-dia {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.alt-list-sep {
+  font-size: 0.72rem;
+  color: var(--fg-subtle);
+}
+
+.alt-list-horas {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--warning, #F59E0B);
+  font-variant-numeric: tabular-nums;
+}
+
+.alt-list-date {
+  font-size: 0.68rem;
+  color: var(--fg-muted);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alt-remove-btn {
+  background: transparent;
+  border: none;
+  color: var(--fg-subtle);
+  font-size: 0.88rem;
+  cursor: pointer;
+  padding: 0 0.15rem;
+  line-height: 1;
+  transition: color var(--dur-fast) var(--ease-out);
+  flex-shrink: 0;
+}
+
+.alt-remove-btn:hover {
+  color: var(--danger);
+}
+
+.alt-empty {
+  font-size: 0.72rem;
+  color: var(--fg-subtle);
+  font-style: italic;
+  padding: 0.25rem 0;
+}
+
+/* Alteração form */
+
+.alt-form {
+  border-top: 1px solid var(--border);
+  padding: 0.75rem 1.25rem 1rem;
+}
+
+.alt-form-title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--fg-muted);
+  margin-bottom: 0.5rem;
+}
+
+.alt-form-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.alt-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1;
+  min-width: 120px;
+}
+
+.alt-form-field--action {
+  flex: 0 0 auto;
+  min-width: auto;
+}
+
+.alt-form-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-subtle);
+}
+
+.alt-form-input {
+  width: 100%;
+  background: var(--bg-input, var(--bg-elevated));
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 0.75rem;
+  padding: 0.35rem 0.5rem;
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+
+.alt-form-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-dim);
+}
+
+.alt-form-input--xs {
+  max-width: 80px;
+}
+
+/* Color scheme for date input (dark mode) */
+.alt-form-input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+}
+
+[data-theme="light"] .alt-form-input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: none;
+}
+
+
 /* ─── Responsive adjustments for Fase 3 ──────────────────── */
 
 @media (max-width: 900px) {
@@ -817,5 +1034,29 @@
 
   .section-tabs {
     padding: 0 0.5rem;
+  }
+
+  .alt-card-header {
+    padding: 0.75rem;
+  }
+
+  .alt-list {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .alt-form {
+    padding: 0.5rem 0.75rem 0.75rem;
+  }
+
+  .alt-form-row {
+    flex-direction: column;
+  }
+
+  .alt-form-field {
+    min-width: 100%;
+  }
+
+  .alt-form-input--xs {
+    max-width: 100%;
   }
 }
