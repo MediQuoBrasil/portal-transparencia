@@ -415,15 +415,10 @@
         }
         renderMeses();
 
-        // Exibir preview com dados parseados
-        state.dadosRelatorio = dados;
-        const mainBody = document.getElementById('mainBody');
-        if (mainBody) {
-          mainBody.innerHTML = renderPreview(dados);
-          bindPreviewEvents();
-        }
-
         window.UI.showToast('Dados importados com sucesso!', 'success');
+
+        // Recarregar detalhe completo (com tabs, teto, relação, feriados)
+        await carregarDetalheVigencia(state.anoAtivo, state.mesAtivo);
       } catch (err) {
         console.error('[Vigencias] Erro ao processar arquivo:', err);
         showUploadFeedback(`Erro ao processar o arquivo: ${err.message}`, 'error');
@@ -1294,12 +1289,9 @@
 
   /**
    * Vincula eventos nas abas de seção.
-   * Carrega conteúdo lazy na primeira ativação de cada aba.
+   * Carrega conteúdo sempre que a aba é ativada (permite refresh após mudanças).
    */
   const bindSectionTabs = () => {
-    /** @type {Set<string>} */
-    const loaded = new Set(['panelVigencia']);
-
     document.querySelectorAll('.section-tab').forEach((tab) => {
       tab.addEventListener('click', () => {
         const panelId = tab.dataset.panel;
@@ -1314,23 +1306,39 @@
           p.classList.toggle('active', p.id === panelId);
         });
 
-        // Lazy-load conteúdo
-        if (!loaded.has(panelId)) {
-          loaded.add(panelId);
+        // Sempre carregar conteúdo ao ativar a aba
+        if (panelId === 'panelRelacao') {
+          const container = document.getElementById('relacaoContainer');
+          if (container) window.Teto.renderRelacaoEditor(container);
+        }
 
-          if (panelId === 'panelRelacao') {
-            const container = document.getElementById('relacaoContainer');
-            if (container) window.Teto.renderRelacaoEditor(container);
-          }
-
-          if (panelId === 'panelFeriados') {
-            const container = document.getElementById('feriadosContainer');
-            if (container) window.Feriados.render(container, state.anoAtivo);
-          }
+        if (panelId === 'panelFeriados') {
+          const container = document.getElementById('feriadosContainer');
+          if (container) window.Feriados.render(container, state.anoAtivo);
         }
       });
     });
   };
 
-  window.Vigencias = { init };
+  /**
+   * Recarrega o teto da vigência ativa.
+   * Chamado por outros módulos (Teto, Feriados) após salvar dados.
+   */
+  const refreshTetoVigencia = () => {
+    if (state.anoAtivo && state.mesAtivo) {
+      window.Teto.carregarTetoVigencia(state.anoAtivo, state.mesAtivo);
+    }
+  };
+
+  /**
+   * Retorna ano e mês da vigência ativa (para uso por outros módulos).
+   *
+   * @returns {{ ano: number, mes: number }}
+   */
+  const getVigenciaAtiva = () => ({
+    ano: state.anoAtivo,
+    mes: state.mesAtivo,
+  });
+
+  window.Vigencias = { init, refreshTetoVigencia, getVigenciaAtiva };
 })();
