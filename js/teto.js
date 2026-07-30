@@ -27,10 +27,11 @@
 
   /**
    * @typedef {Object} AlteracaoRelacao
-   * @property {string} data_inicio  - Data ISO "YYYY-MM-DD"
-   * @property {string} dia_semana   - Dia da semana afetado
-   * @property {number} total_horas  - Novo total de horas
-   * @property {string} criado_em    - Timestamp de criação
+   * @property {string} data_inicio      - Data ISO "YYYY-MM-DD"
+   * @property {string} dia_semana       - Dia da semana afetado
+   * @property {number} total_horas      - Novo total de horas
+   * @property {number} horas_anteriores - Total de horas antes da alteração
+   * @property {string} criado_em        - Timestamp de criação
    */
 
   /**
@@ -855,11 +856,14 @@
 
       const detailsHtml = items.map((alt) => {
         const diaLabel = DIAS_LABEL[DIAS_KEY.indexOf(alt.dia_semana)] || alt.dia_semana;
+        const horasAnt = alt.horas_anteriores || 0;
+        const horasText = horasAnt > 0
+          ? `Antes: ${horasAnt}h → ${alt.total_horas}h`
+          : `${alt.total_horas}h`;
         return `
           <div class="hist-detail" data-di="${alt.data_inicio}" data-ds="${alt.dia_semana}">
             <span class="hist-detail-dia">${window.Utils.escapeHtml(diaLabel)}</span>
-            <span class="hist-detail-arrow">→</span>
-            <span class="hist-detail-horas">${alt.total_horas}h</span>
+            <span class="hist-detail-horas">${horasText}</span>
             ${isAdmin ? `<button type="button" class="hist-remove-btn" data-di="${alt.data_inicio}" data-ds="${alt.dia_semana}" title="Remover alteração">×</button>` : ''}
           </div>
         `;
