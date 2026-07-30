@@ -442,6 +442,59 @@
 
   // ─── Preview ────────────────────────────────────────────
 
+  /** @type {'alfa'|'horas'} */
+  let sortMode = 'alfa';
+
+  /**
+   * Gera o HTML de uma linha de profissional na tabela.
+   *
+   * @param {Profissional} p - Profissional.
+   * @param {Object} totais - totalGeral { horas, valor }.
+   * @returns {string} HTML da linha (tr).
+   */
+  const renderProfRow = (p, totais) => {
+    const nome = window.Utils.escapeHtml(p.nome);
+    const crm = window.Utils.escapeHtml(p.crm);
+    const horas = window.Utils.formatarTotalHoras(p.totalHoras);
+    const horasPct = window.Utils.formatarPorcentagem(p.totalHoras, totais.horas);
+    const valor = window.Utils.formatarMoeda(p.totalValor);
+    const valorPct = window.Utils.formatarPorcentagem(p.totalValor, totais.valor);
+
+    return `
+      <tr class="prof-row">
+        <td class="prof-cell-name"><span class="prof-dot"></span>${nome}</td>
+        <td class="prof-cell-crm">${crm}</td>
+        <td class="prof-cell-metric">${horas} <span class="prof-pct">${horasPct}</span></td>
+        <td class="prof-cell-metric prof-cell-valor">${valor} <span class="prof-pct">${valorPct}</span></td>
+      </tr>
+    `;
+  };
+
+  /**
+   * Ordena e re-renderiza apenas a tabela de profissionais.
+   *
+   * @param {Object} dados - DadosRelatorio.
+   */
+  const reorderProfList = (dados) => {
+    const tbody = document.getElementById('profTbody');
+    if (!tbody) return;
+
+    const sorted = [...dados.profissionais];
+
+    if (sortMode === 'horas') {
+      sorted.sort((a, b) => b.totalHoras - a.totalHoras || b.totalValor - a.totalValor);
+    } else {
+      sorted.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    }
+
+    tbody.innerHTML = sorted.map((p) => renderProfRow(p, dados.totalGeral)).join('');
+
+    // Atualizar estado visual dos botões
+    document.querySelectorAll('.sort-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.sort === sortMode);
+    });
+  };
+
   /**
    * Renderiza o preview completo: métricas, profissionais, botões de download.
    *
@@ -453,15 +506,21 @@
     const session = window.Auth.getSession();
     const podeRemover = session && session.role === 'admin';
 
-    const profListHtml = dados.profissionais
-      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
-      .map((p) => `<li>${window.Utils.escapeHtml(p.nome)} <span class="prof-crm">(${window.Utils.escapeHtml(p.crm)})</span></li>`)
+    const sorted = [...dados.profissionais];
+    if (sortMode === 'horas') {
+      sorted.sort((a, b) => b.totalHoras - a.totalHoras || b.totalValor - a.totalValor);
+    } else {
+      sorted.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    }
+
+    const profRowsHtml = sorted
+      .map((p) => renderProfRow(p, dados.totalGeral))
       .join('');
 
     return `
       <div class="card">
         <div class="card-title">Resumo da vigência</div>
-        <div class="metrics">
+        <div class="metrics metrics--4col">
           <div class="metric-box">
             <div class="value">${dados.vigencia.curta}</div>
             <div class="label">Vigência</div>
@@ -469,10 +528,6 @@
           <div class="metric-box">
             <div class="value">${dados.profissionais.length}</div>
             <div class="label">Profissionais</div>
-          </div>
-          <div class="metric-box">
-            <div class="value">${dados.totalGeral.plantoes}</div>
-            <div class="label">Plantões</div>
           </div>
           <div class="metric-box">
             <div class="value">${window.Utils.formatarTotalHoras(dados.totalGeral.horas)}</div>
@@ -485,9 +540,40 @@
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-title">Profissionais detectados</div>
-        <ul class="prof-list">${profListHtml}</ul>
+      <div class="card card--prof">
+        <div class="card-header-row">
+          <div class="card-title">Profissionais</div>
+          <div class="sort-group" role="group" aria-label="Ordenação">
+            <button type="button" class="sort-btn${sortMode === 'alfa' ? ' active' : ''}" data-sort="alfa" id="sortAlfa">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 6h18"/><path d="M3 12h12"/><path d="M3 18h6"/>
+              </svg>
+              A–Z
+            </button>
+            <button type="button" class="sort-btn${sortMode === 'horas' ? ' active' : ''}" data-sort="horas" id="sortHoras">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/>
+              </svg>
+              Maior carga
+            </button>
+          </div>
+        </div>
+
+        <div class="prof-table-wrap">
+          <table class="prof-table">
+            <thead>
+              <tr>
+                <th class="prof-th-name">Nome</th>
+                <th class="prof-th-crm">CRM</th>
+                <th class="prof-th-metric">Horas</th>
+                <th class="prof-th-metric">Valor</th>
+              </tr>
+            </thead>
+            <tbody id="profTbody">${profRowsHtml}</tbody>
+          </table>
+        </div>
       </div>
 
       <div class="actions-bar">
@@ -582,6 +668,24 @@
 
     if (btnRemover) {
       btnRemover.addEventListener('click', removerVigencia);
+    }
+
+    // Sort buttons
+    const sortAlfa = document.getElementById('sortAlfa');
+    const sortHoras = document.getElementById('sortHoras');
+
+    if (sortAlfa) {
+      sortAlfa.addEventListener('click', () => {
+        sortMode = 'alfa';
+        reorderProfList(state.dadosRelatorio);
+      });
+    }
+
+    if (sortHoras) {
+      sortHoras.addEventListener('click', () => {
+        sortMode = 'horas';
+        reorderProfList(state.dadosRelatorio);
+      });
     }
   };
 
