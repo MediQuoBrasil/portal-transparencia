@@ -1929,8 +1929,7 @@ body {
   white-space: nowrap;
 }
 
-.prof-detail-table th:nth-child(3),
-.prof-detail-table th:nth-child(4) {
+.prof-detail-table th:nth-child(3) {
   text-align: right;
 }
 
@@ -1947,8 +1946,7 @@ body {
   border-bottom-color: rgba(0,0,0,0.03);
 }
 
-.prof-detail-table td:nth-child(3),
-.prof-detail-table td:nth-child(4) {
+.prof-detail-table td:nth-child(3) {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
