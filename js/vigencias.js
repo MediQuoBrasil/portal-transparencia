@@ -192,6 +192,11 @@
       : (state.vigencias[0]?.mes || 1);
 
     selecionarMes(mesDefault);
+
+    // Prefetch do novo ano em background
+    if (window.Prefetch) {
+      window.Prefetch.prefetchAno(ano);
+    }
   };
 
   /**
@@ -221,6 +226,8 @@
 
   /**
    * Carrega e exibe o conteúdo de uma vigência específica.
+   * Usa detalhe_completo (detalhe + teto em 1 round-trip).
+   * Tenta cache do Prefetch primeiro → fallback para API.
    *
    * @param {number} ano - Ano.
    * @param {number} mes - Mês.
@@ -231,20 +238,21 @@
 
     window.UI.showLoading('Carregando dados da vigência...');
 
-    const result = await window.Api.request('detalhe_vigencia', { ano, mes });
+    // Usar Prefetch.loadVigencia (cache-first → detalhe_completo como fallback)
+    const result = await window.Prefetch.loadVigencia(ano, mes);
 
     window.UI.hideLoading();
 
-    if (!result.ok) {
+    if (!result.ok || !result.data) {
       mainBody.innerHTML = renderPlaceholder(
         'alert-triangle',
         'Erro ao carregar',
-        result.error || 'Não foi possível carregar os dados desta vigência.',
+        'Não foi possível carregar os dados desta vigência.',
       );
       return;
     }
 
-    const vigencia = result.data;
+    const { detalhe: vigencia, teto: tetoData } = result.data;
 
     // Conteúdo da aba Vigência: preview com dados ou upload/placeholder
     let vigenciaContent = '';
@@ -288,9 +296,17 @@
 
     bindSectionTabs();
 
-    // Carregar teto da vigência (assíncrono, não bloqueia)
-    // Teto depende de calendário + relação de plantões, não de dados uploadados
-    window.Teto.carregarTetoVigencia(ano, mes);
+    // Renderizar teto inline (sem round-trip — já veio no detalhe_completo)
+    if (tetoData) {
+      const container = document.getElementById('tetoContainer');
+      if (container) {
+        container.innerHTML = renderTetoCard(tetoData);
+        bindTetoToggle();
+      }
+    } else {
+      // Fallback se teto não veio no batch
+      window.Teto.carregarTetoVigencia(ano, mes);
+    }
   };
 
   // ─── Upload Zone ────────────────────────────────────────
@@ -1264,6 +1280,12 @@
 
       // Renderizar detalhe diretamente (sem nova chamada de rede)
       renderDetalheFromBatch(detalhe, teto, ano, mes);
+
+      // Disparar prefetch de todas as vigências do ano em background
+      // Após render, carrega dados restantes para acesso instantâneo
+      if (window.Prefetch) {
+        window.Prefetch.startBackground(anoAlvo, anos);
+      }
       return;
     }
 
