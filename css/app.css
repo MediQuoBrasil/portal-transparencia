@@ -1923,31 +1923,35 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--fg-subtle);
-  padding: 0 0 0.3rem;
+  padding: 0 0.75rem 0.3rem 0;
   text-align: left;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
 
-.prof-detail-table th:nth-child(3) {
-  text-align: right;
+.prof-detail-table th:last-child {
+  padding-right: 0;
 }
 
 .prof-detail-table td {
   font-size: 0.74rem;
   color: var(--fg-muted);
-  padding: 0.25rem 0;
+  padding: 0.25rem 0.75rem 0.25rem 0;
   border-bottom: 1px solid rgba(255,255,255,0.03);
   white-space: nowrap;
   vertical-align: middle;
+}
+
+.prof-detail-table td:last-child {
+  padding-right: 0;
 }
 
 [data-theme="light"] .prof-detail-table td {
   border-bottom-color: rgba(0,0,0,0.03);
 }
 
-.prof-detail-table td:nth-child(3) {
-  text-align: right;
+.prof-detail-table td:nth-child(3),
+.prof-detail-table td:nth-child(4) {
   font-variant-numeric: tabular-nums;
 }
 
@@ -2115,24 +2119,27 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--fg-subtle);
-  padding: 0 0 0.3rem;
+  padding: 0 0.75rem 0.3rem 0;
   text-align: left;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
 
-.dia-detail-table th:nth-child(4),
-.dia-detail-table th:nth-child(5) {
-  text-align: right;
+.dia-detail-table th:last-child {
+  padding-right: 0;
 }
 
 .dia-detail-table td {
   font-size: 0.74rem;
   color: var(--fg-muted);
-  padding: 0.25rem 0;
+  padding: 0.25rem 0.75rem 0.25rem 0;
   border-bottom: 1px solid rgba(255,255,255,0.03);
   white-space: nowrap;
   vertical-align: middle;
+}
+
+.dia-detail-table td:last-child {
+  padding-right: 0;
 }
 
 [data-theme="light"] .dia-detail-table td {
@@ -2146,7 +2153,6 @@ body {
 
 .dia-detail-table td:nth-child(4),
 .dia-detail-table td:nth-child(5) {
-  text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
@@ -2224,8 +2230,8 @@ body {
   .prof-detail-table th,
   .prof-detail-table td {
     font-size: 0.62rem;
-    padding-left: 0.15rem;
-    padding-right: 0.15rem;
+    padding-left: 0;
+    padding-right: 0.4rem;
   }
 }
 
