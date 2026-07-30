@@ -1666,6 +1666,27 @@ body {
   gap: 0.5rem;
   font-weight: 500;
   padding-right: 1rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.prof-cell-name:hover .prof-name-text {
+  color: var(--accent);
+}
+
+.prof-chevron {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--fg-subtle);
+  transition: transform var(--dur-fast) var(--ease-out),
+              color var(--dur-fast) var(--ease-out);
+  margin-left: auto;
+}
+
+.prof-row.expanded .prof-chevron {
+  transform: rotate(90deg);
+  color: var(--accent);
 }
 
 .prof-dot {
@@ -1862,5 +1883,365 @@ body {
   .prof-row td {
     padding-left: 0.1rem;
     padding-right: 0.1rem;
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   FEATURE 1 — Expandable professional shift detail
+   ═══════════════════════════════════════════════════════════ */
+
+.prof-detail-row td {
+  padding: 0 !important;
+  border-bottom: 1px solid var(--border);
+}
+
+.prof-detail-wrap {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height var(--dur-std) var(--ease-out);
+}
+
+.prof-detail-row.open .prof-detail-wrap {
+  max-height: 2000px;
+  transition: max-height 0.5s ease-in;
+}
+
+.prof-detail-inner {
+  padding: 0.5rem 1rem 0.75rem 1.75rem;
+}
+
+.prof-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+.prof-detail-table th {
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-subtle);
+  padding: 0 0 0.3rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.prof-detail-table th:nth-child(3),
+.prof-detail-table th:nth-child(4) {
+  text-align: right;
+}
+
+.prof-detail-table td {
+  font-size: 0.74rem;
+  color: var(--fg-muted);
+  padding: 0.25rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+[data-theme="light"] .prof-detail-table td {
+  border-bottom-color: rgba(0,0,0,0.03);
+}
+
+.prof-detail-table td:nth-child(3),
+.prof-detail-table td:nth-child(4) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.prof-detail-table .prof-detail-total td {
+  border-top: 1px solid var(--border);
+  border-bottom: none;
+  font-weight: 600;
+  color: var(--fg);
+  padding-top: 0.35rem;
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   FEATURE 2 — Days card with expandable detail
+   ═══════════════════════════════════════════════════════════ */
+
+.card--dias {
+  padding-bottom: 0.75rem;
+}
+
+.dia-table-wrap {
+  overflow-x: auto;
+  margin: 0 -1.5rem;
+  padding: 0 1.5rem;
+}
+
+.dia-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+.dia-table thead {
+  position: sticky;
+  top: 0;
+}
+
+.dia-table th {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-subtle);
+  padding: 0 0 0.4rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.dia-th-data {
+  padding-left: 1rem;
+}
+
+.dia-th-metric {
+  text-align: left !important;
+  padding-left: 0.75rem;
+}
+
+.dia-row {
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.dia-row:hover {
+  background: var(--surface);
+}
+
+.dia-row td {
+  padding: 0.4rem 0;
+  font-size: 0.8rem;
+  color: var(--fg);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.dia-cell-data {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+  padding-right: 1rem;
+}
+
+.dia-cell-data:hover .dia-data-text {
+  color: var(--accent);
+}
+
+.dia-dot {
+  width: 5px;
+  height: 5px;
+  background: var(--accent);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dia-chevron {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--fg-subtle);
+  transition: transform var(--dur-fast) var(--ease-out),
+              color var(--dur-fast) var(--ease-out);
+  margin-left: auto;
+}
+
+.dia-row.expanded .dia-chevron {
+  transform: rotate(90deg);
+  color: var(--accent);
+}
+
+.dia-cell-metric {
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.78rem;
+  padding-left: 0.75rem;
+}
+
+.dia-metric-val {
+  display: inline-block;
+  min-width: 7em;
+}
+
+.dia-cell-valor .dia-metric-val {
+  min-width: 8.5em;
+}
+
+.dia-pct {
+  color: var(--fg-subtle);
+  font-size: 0.68rem;
+  margin-left: 0.35rem;
+}
+
+/* Day detail expandable */
+.dia-detail-row td {
+  padding: 0 !important;
+  border-bottom: 1px solid var(--border);
+}
+
+.dia-detail-wrap {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height var(--dur-std) var(--ease-out);
+}
+
+.dia-detail-row.open .dia-detail-wrap {
+  max-height: 3000px;
+  transition: max-height 0.5s ease-in;
+}
+
+.dia-detail-inner {
+  padding: 0.5rem 1rem 0.75rem 1.75rem;
+}
+
+.dia-detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+.dia-detail-table th {
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-subtle);
+  padding: 0 0 0.3rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.dia-detail-table th:nth-child(4),
+.dia-detail-table th:nth-child(5) {
+  text-align: right;
+}
+
+.dia-detail-table td {
+  font-size: 0.74rem;
+  color: var(--fg-muted);
+  padding: 0.25rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+[data-theme="light"] .dia-detail-table td {
+  border-bottom-color: rgba(0,0,0,0.03);
+}
+
+.dia-detail-table td:first-child {
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.dia-detail-table td:nth-child(4),
+.dia-detail-table td:nth-child(5) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.dia-detail-table .dia-detail-total td {
+  border-top: 1px solid var(--border);
+  border-bottom: none;
+  font-weight: 600;
+  color: var(--fg);
+  padding-top: 0.35rem;
+}
+
+/* ─── Days totals row ─────────────────────────────────────── */
+
+.dia-totals-row td {
+  padding: 0.55rem 0 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--fg);
+  border-top: 1px solid var(--border);
+  border-bottom: none;
+}
+
+.dia-totals-label {
+  padding-left: 1rem;
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+}
+
+
+/* ─── Responsive for days card ─────────────────────────────── */
+
+@media (max-width: 768px) {
+  .card--dias {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .dia-table-wrap {
+    margin: 0 -0.75rem;
+    padding: 0 0.75rem;
+  }
+
+  .dia-cell-metric {
+    font-size: 0.72rem;
+  }
+
+  .dia-metric-val {
+    min-width: 6em;
+  }
+
+  .dia-cell-valor .dia-metric-val {
+    min-width: 7.5em;
+  }
+
+  .dia-pct {
+    font-size: 0.62rem;
+  }
+
+  .dia-table th,
+  .dia-row td {
+    padding-left: 0.1rem;
+    padding-right: 0.1rem;
+  }
+
+  .dia-detail-inner,
+  .prof-detail-inner {
+    padding-left: 0.75rem;
+    padding-right: 0.25rem;
+  }
+
+  .dia-detail-table th,
+  .dia-detail-table td,
+  .prof-detail-table th,
+  .prof-detail-table td {
+    font-size: 0.62rem;
+    padding-left: 0.15rem;
+    padding-right: 0.15rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .dia-detail-inner,
+  .prof-detail-inner {
+    padding-left: 0.5rem;
+    padding-right: 0.15rem;
+  }
+
+  .dia-detail-table th,
+  .dia-detail-table td,
+  .prof-detail-table th,
+  .prof-detail-table td {
+    font-size: 0.58rem;
   }
 }
