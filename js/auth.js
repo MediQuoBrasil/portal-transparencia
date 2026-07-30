@@ -231,15 +231,9 @@
     const session = getSession();
 
     if (session) {
-      // Sessão existente — warmup do backend IMEDIATAMENTE
-      // Dispara GET na API para aquecer a instância do Apps Script
-      // enquanto o App.init() prepara o init_dashboard (que é POST autenticado).
-      // Economia: ~1-2s de cold-start eliminados do caminho crítico.
-      if (window.Prefetch) {
-        window.Prefetch.earlyWarmup();
-      }
-
-      // Sessão existente — inicializar direto
+      // Sessão existente — inicializar direto.
+      // Warmup já foi disparado automaticamente pelo prefetch.js
+      // no carregamento do script (antes do GIS e antes deste init).
       loginScreen.style.display = 'none';
       window.App.init({
         email: session.email,
@@ -247,7 +241,9 @@
         role: session.role,
       });
     } else {
-      // Sem sessão — exibir login
+      // Sem sessão — exibir login.
+      // Warmup já foi disparado no carregamento do prefetch.js,
+      // então o backend estará quente quando o login completar.
       loginScreen.style.display = '';
     }
   };
