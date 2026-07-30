@@ -255,8 +255,7 @@
         { inicio: datas.inicio, fim: datas.fim },
         vigencia.registros,
       );
-      vigenciaContent = renderPreview(state.dadosRelatorio, vigencia)
-        + '<div id="tetoContainer"></div>';
+      vigenciaContent = renderPreview(state.dadosRelatorio, vigencia);
     } else {
       const session = window.Auth.getSession();
       const podeUpload = session && (session.role === 'admin' || session.role === 'gestor');
@@ -269,6 +268,9 @@
           `A vigência de ${vigencia.nome} ainda não possui dados.`,
         );
     }
+
+    // Teto sempre disponível — depende apenas de calendário + relação de plantões
+    vigenciaContent += '<div id="tetoContainer"></div>';
 
     // Tabs sempre visíveis — Feriados, Relação e Teto disponíveis independente de dados
     mainBody.innerHTML = renderSectionTabs()
@@ -287,9 +289,8 @@
     bindSectionTabs();
 
     // Carregar teto da vigência (assíncrono, não bloqueia)
-    if (vigencia.temDados) {
-      window.Teto.carregarTetoVigencia(ano, mes);
-    }
+    // Teto depende de calendário + relação de plantões, não de dados uploadados
+    window.Teto.carregarTetoVigencia(ano, mes);
   };
 
   // ─── Upload Zone ────────────────────────────────────────
@@ -1313,6 +1314,10 @@
         });
 
         // Sempre carregar conteúdo ao ativar a aba
+        if (panelId === 'panelVigencia') {
+          refreshTetoVigencia();
+        }
+
         if (panelId === 'panelRelacao') {
           const container = document.getElementById('relacaoContainer');
           if (container) window.Teto.renderRelacaoEditor(container);
