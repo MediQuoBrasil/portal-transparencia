@@ -910,8 +910,9 @@ body {
   padding: 1.5rem;
   display: flex;
   flex-direction: column;
-  max-width: 1000px;
+  max-width: 860px;
   width: 100%;
+  margin: 0 auto;
 }
 
 
@@ -1281,6 +1282,39 @@ body {
    RESPONSIVE
    ═══════════════════════════════════════════════════════════ */
 
+/* ─── Large desktops (1600px+) — give extra breathing room ── */
+
+@media (min-width: 1600px) {
+  .main-body {
+    max-width: 920px;
+    padding: 2rem 2rem;
+  }
+
+  .card {
+    padding: 1.5rem 1.75rem;
+  }
+}
+
+/* ─── Very large / ultrawide (1920px+) ──────────────────── */
+
+@media (min-width: 1920px) {
+  .main-body {
+    max-width: 960px;
+    padding: 2.25rem 2rem;
+  }
+}
+
+/* ─── Tablet landscape / smaller desktops ───────────────── */
+
+@media (max-width: 1024px) {
+  .main-body {
+    max-width: none;
+    padding: 1.25rem;
+  }
+}
+
+/* ─── Mobile / tablet portrait ──────────────────────────── */
+
 @media (max-width: 768px) {
   .sidebar {
     transform: translateX(-100%);
@@ -1303,6 +1337,7 @@ body {
   }
 
   .main-body {
+    max-width: none;
     padding: 1rem;
   }
 
