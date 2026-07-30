@@ -1639,8 +1639,8 @@ body {
 }
 
 .prof-th-metric {
-  text-align: right !important;
-  padding-right: 0.25rem;
+  text-align: left !important;
+  padding-left: 0.75rem;
 }
 
 .prof-row {
@@ -1684,21 +1684,25 @@ body {
 }
 
 .prof-cell-metric {
-  text-align: right;
+  text-align: left;
   font-variant-numeric: tabular-nums;
   font-size: 0.78rem;
   padding-left: 0.75rem;
-  padding-right: 0.25rem;
 }
 
-.prof-cell-valor {
-  padding-right: 0;
+.prof-metric-val {
+  display: inline-block;
+  min-width: 7em;
+}
+
+.prof-cell-valor .prof-metric-val {
+  min-width: 8.5em;
 }
 
 .prof-pct {
   color: var(--fg-subtle);
   font-size: 0.68rem;
-  margin-left: 0.2rem;
+  margin-left: 0.35rem;
 }
 
 
@@ -1840,6 +1844,14 @@ body {
 
   .prof-cell-metric {
     font-size: 0.72rem;
+  }
+
+  .prof-metric-val {
+    min-width: 6em;
+  }
+
+  .prof-cell-valor .prof-metric-val {
+    min-width: 7.5em;
   }
 
   .prof-pct {
