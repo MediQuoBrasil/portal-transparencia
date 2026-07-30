@@ -1066,9 +1066,11 @@
 
 .hist-detail-horas {
   font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--accent);
+  font-weight: 500;
+  color: var(--fg);
   font-variant-numeric: tabular-nums;
+  flex: 1;
+  min-width: 0;
 }
 
 .hist-remove-btn {
