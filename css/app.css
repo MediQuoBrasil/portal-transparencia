@@ -12,9 +12,10 @@
   padding: 0;
 }
 
-/* ─── Variáveis — Tema Escuro ────────────────────────────── */
+/* ─── Variáveis — Tema Escuro (padrão) ───────────────────── */
 
-:root {
+:root,
+[data-theme="dark"] {
   --color-bg:           #090710;
   --color-surface:      #13101f;
   --color-surface-2:    #1a1528;
@@ -45,6 +46,30 @@
   --font-body:          'Nunito Sans', sans-serif;
   --sidebar-width:      260px;
   --header-height:      56px;
+  --overlay-bg:         rgba(9, 7, 16, 0.8);
+  --sidebar-overlay-bg: rgba(9, 7, 16, 0.6);
+}
+
+/* ─── Variáveis — Tema Claro ─────────────────────────────── */
+
+[data-theme="light"] {
+  --color-bg:           #f4f0fa;
+  --color-surface:      #ffffff;
+  --color-surface-2:    #f0ecf7;
+  --color-surface-3:    #e8e2f4;
+  --color-border:       rgba(73, 30, 156, 0.12);
+  --color-border-hover: rgba(73, 30, 156, 0.3);
+  --color-primary-glow: rgba(73, 30, 156, 0.06);
+  --color-text:         #1c1230;
+  --color-text-muted:   #5e5077;
+  --color-text-dim:     #8a7da3;
+  --color-input-bg:     #f8f5ff;
+  --color-input-border: #d4cce6;
+  --shadow-sm:          0 1px 3px rgba(73, 30, 156, 0.06);
+  --shadow-md:          0 4px 20px rgba(73, 30, 156, 0.08);
+  --shadow-glow:        0 0 40px rgba(73, 30, 156, 0.05);
+  --overlay-bg:         rgba(244, 240, 250, 0.85);
+  --sidebar-overlay-bg: rgba(244, 240, 250, 0.7);
 }
 
 /* ─── Base ───────────────────────────────────────────────── */
@@ -62,6 +87,45 @@ body {
   color: var(--color-text);
   line-height: 1.6;
   min-height: 100vh;
+  transition: background 0.35s ease, color 0.35s ease;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 600px 400px at 50% 0%, rgba(var(--color-primary-rgb), 0.07), transparent),
+    radial-gradient(ellipse 400px 300px at 80% 80%, rgba(var(--color-primary-rgb), 0.04), transparent);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ─── Botão Tema ──────────────────────────────────────────── */
+
+.theme-toggle {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 100;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.25s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.theme-toggle:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary-soft);
+  transform: scale(1.08);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -75,25 +139,13 @@ body {
   justify-content: center;
   min-height: 100vh;
   padding: 2rem;
-  background: var(--color-bg);
   position: relative;
-}
-
-/* Subtle ambient dot pattern — não é gradiente, é textura de fundo */
-.login-screen::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: radial-gradient(
-    rgba(var(--color-primary-rgb), 0.08) 1px,
-    transparent 1px
-  );
-  background-size: 28px 28px;
-  pointer-events: none;
+  z-index: 1;
 }
 
 .login-card {
   position: relative;
+  z-index: 1;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -147,11 +199,39 @@ body {
   display: block;
 }
 
-.login-divider {
-  font-size: 0.75rem;
-  color: var(--color-text-dim);
-  margin-top: 1.5rem;
-  letter-spacing: 0.02em;
+/* ─── Botão customizado Google ─────────────────────────────── */
+
+.btn-google {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 1.4rem;
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-soft));
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.btn-google:hover { opacity: 0.88; }
+
+.btn-google:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-google .spinner {
+  display: none;
+}
+
+.google-btn-fallback {
+  display: none;
+  justify-content: center;
+  margin-top: 0.75rem;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -165,6 +245,8 @@ body {
 .app-shell.active {
   display: flex;
   min-height: 100vh;
+  position: relative;
+  z-index: 1;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -200,25 +282,37 @@ body {
 }
 
 .sidebar-header {
-  background: var(--color-primary);
-  color: #fff;
-  padding: 1rem 1.25rem;
+  background: var(--color-surface-2);
+  border-bottom: 1px solid var(--color-border);
+  padding: 1.15rem 1.25rem;
   display: flex;
   align-items: center;
   gap: 0.65rem;
   flex-shrink: 0;
+  position: relative;
+}
+
+.sidebar-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 1rem;
+  right: 1rem;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(var(--color-primary-rgb), 0.25), transparent);
 }
 
 .sidebar-logo {
   width: 34px;
   height: 34px;
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--color-primary-glow);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: #fff;
+  color: var(--color-accent);
 }
 
 .sidebar-brand {
@@ -229,14 +323,18 @@ body {
 .sidebar-brand-title {
   font-family: var(--font-display);
   font-size: 0.88rem;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -0.01em;
+  background: linear-gradient(135deg, var(--color-accent), var(--color-primary-soft));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .sidebar-brand-subtitle {
   font-size: 0.7rem;
-  opacity: 0.75;
-  font-weight: 400;
+  color: var(--color-text-muted);
+  font-weight: 500;
 }
 
 /* ─── Sidebar: Seções ────────────────────────────────────── */
@@ -739,7 +837,7 @@ body {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(9, 7, 16, 0.8);
+  background: var(--overlay-bg, rgba(9, 7, 16, 0.8));
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   z-index: 500;
@@ -778,7 +876,7 @@ body {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(9, 7, 16, 0.6);
+  background: var(--sidebar-overlay-bg);
   z-index: 90;
 }
 
