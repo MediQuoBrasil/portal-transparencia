@@ -246,44 +246,50 @@
 
     const vigencia = result.data;
 
-    if (!vigencia.temDados) {
-      // Verificar permissão para upload
+    // Conteúdo da aba Vigência: preview com dados ou upload/placeholder
+    let vigenciaContent = '';
+
+    if (vigencia.temDados) {
+      const datas = datasVigencia(ano, mes);
+      state.dadosRelatorio = window.Relatorios.reconstruirDados(
+        { inicio: datas.inicio, fim: datas.fim },
+        vigencia.registros,
+      );
+      vigenciaContent = renderPreview(state.dadosRelatorio, vigencia)
+        + '<div id="tetoContainer"></div>';
+    } else {
       const session = window.Auth.getSession();
       const podeUpload = session && (session.role === 'admin' || session.role === 'gestor');
 
-      if (podeUpload) {
-        mainBody.innerHTML = renderUploadZone(vigencia);
-        bindUploadEvents();
-      } else {
-        mainBody.innerHTML = renderPlaceholder(
+      vigenciaContent = podeUpload
+        ? renderUploadZone(vigencia)
+        : renderPlaceholder(
           'file-x',
           'Nenhum dado importado',
           `A vigência de ${vigencia.nome} ainda não possui dados.`,
         );
-      }
-      return;
     }
 
-    // Reconstruir DadosRelatorio a partir dos dados persistidos
-    const datas = datasVigencia(ano, mes);
-    state.dadosRelatorio = window.Relatorios.reconstruirDados(
-      { inicio: datas.inicio, fim: datas.fim },
-      vigencia.registros,
-    );
-
+    // Tabs sempre visíveis — Feriados, Relação e Teto disponíveis independente de dados
     mainBody.innerHTML = renderSectionTabs()
       + '<div class="section-panel active" id="panelVigencia">'
-      + renderPreview(state.dadosRelatorio, vigencia)
-      + '<div id="tetoContainer"></div>'
+      + vigenciaContent
       + '</div>'
       + '<div class="section-panel" id="panelRelacao"><div id="relacaoContainer"></div></div>'
       + '<div class="section-panel" id="panelFeriados"><div id="feriadosContainer"></div></div>';
 
-    bindPreviewEvents();
+    if (vigencia.temDados) {
+      bindPreviewEvents();
+    } else {
+      bindUploadEvents();
+    }
+
     bindSectionTabs();
 
     // Carregar teto da vigência (assíncrono, não bloqueia)
-    window.Teto.carregarTetoVigencia(ano, mes);
+    if (vigencia.temDados) {
+      window.Teto.carregarTetoVigencia(ano, mes);
+    }
   };
 
   // ─── Upload Zone ────────────────────────────────────────
