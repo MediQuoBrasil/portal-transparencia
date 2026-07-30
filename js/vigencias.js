@@ -271,8 +271,19 @@
       vigencia.registros,
     );
 
-    mainBody.innerHTML = renderPreview(state.dadosRelatorio, vigencia);
+    mainBody.innerHTML = renderSectionTabs()
+      + '<div class="section-panel active" id="panelVigencia">'
+      + renderPreview(state.dadosRelatorio, vigencia)
+      + '<div id="tetoContainer"></div>'
+      + '</div>'
+      + '<div class="section-panel" id="panelRelacao"><div id="relacaoContainer"></div></div>'
+      + '<div class="section-panel" id="panelFeriados"><div id="feriadosContainer"></div></div>';
+
     bindPreviewEvents();
+    bindSectionTabs();
+
+    // Carregar teto da vigência (assíncrono, não bloqueia)
+    window.Teto.carregarTetoVigencia(ano, mes);
   };
 
   // ─── Upload Zone ────────────────────────────────────────
@@ -870,7 +881,7 @@
         <div class="card-title">Resumo da vigência</div>
         <div class="metrics metrics--4col">
           <div class="metric-box">
-            <div class="value">${dados.vigencia.curta.replace(/-/g, '/')}</div>
+            <div class="value">${dados.vigencia.curta}</div>
             <div class="label">Vigência</div>
           </div>
           <div class="metric-box">
@@ -920,13 +931,6 @@
               </tr>
             </thead>
             <tbody id="profTbody">${profRowsHtml}</tbody>
-            <tfoot>
-              <tr class="prof-totals-row">
-                <td class="prof-totals-label" colspan="2">Total geral</td>
-                <td class="prof-cell-metric"><span class="prof-metric-val">${window.Utils.formatarTotalHoras(dados.totalGeral.horas)}</span></td>
-                <td class="prof-cell-metric prof-cell-valor"><span class="prof-metric-val">${window.Utils.formatarMoeda(dados.totalGeral.valor)}</span></td>
-              </tr>
-            </tfoot>
           </table>
         </div>
       </div>
@@ -1235,6 +1239,90 @@
     if (state.anos.length > 0) {
       await selecionarAno(state.anos[state.anos.length - 1]);
     }
+  };
+
+  // ─── Section Tabs (Fase 3) ────────────────────────────────
+
+  /**
+   * Renderiza as abas de navegação entre seções (Vigência, Relação, Feriados).
+   *
+   * @returns {string} HTML das abas.
+   */
+  const renderSectionTabs = () => `
+    <div class="section-tabs">
+      <button type="button" class="section-tab active" data-panel="panelVigencia">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round"
+             stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="9"/>
+          <rect x="14" y="3" width="7" height="5"/>
+          <rect x="14" y="12" width="7" height="9"/>
+          <rect x="3" y="16" width="7" height="5"/>
+        </svg>
+        Vigência
+      </button>
+      <button type="button" class="section-tab" data-panel="panelRelacao">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round"
+             stroke-linejoin="round">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+          <line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8" y1="2" x2="8" y2="6"/>
+          <line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+        Relação de Plantões
+      </button>
+      <button type="button" class="section-tab" data-panel="panelFeriados">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round"
+             stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="12"/>
+          <line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        Feriados
+      </button>
+    </div>
+  `;
+
+  /**
+   * Vincula eventos nas abas de seção.
+   * Carrega conteúdo lazy na primeira ativação de cada aba.
+   */
+  const bindSectionTabs = () => {
+    /** @type {Set<string>} */
+    const loaded = new Set(['panelVigencia']);
+
+    document.querySelectorAll('.section-tab').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const panelId = tab.dataset.panel;
+
+        // Atualizar abas ativas
+        document.querySelectorAll('.section-tab').forEach((t) => {
+          t.classList.toggle('active', t === tab);
+        });
+
+        // Atualizar painéis ativos
+        document.querySelectorAll('.section-panel').forEach((p) => {
+          p.classList.toggle('active', p.id === panelId);
+        });
+
+        // Lazy-load conteúdo
+        if (!loaded.has(panelId)) {
+          loaded.add(panelId);
+
+          if (panelId === 'panelRelacao') {
+            const container = document.getElementById('relacaoContainer');
+            if (container) window.Teto.renderRelacaoEditor(container);
+          }
+
+          if (panelId === 'panelFeriados') {
+            const container = document.getElementById('feriadosContainer');
+            if (container) window.Feriados.render(container, state.anoAtivo);
+          }
+        }
+      });
+    });
   };
 
   window.Vigencias = { init };
