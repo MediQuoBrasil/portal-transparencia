@@ -870,7 +870,7 @@
         <div class="card-title">Resumo da vigência</div>
         <div class="metrics metrics--4col">
           <div class="metric-box">
-            <div class="value">${dados.vigencia.curta}</div>
+            <div class="value">${dados.vigencia.curta.replace(/-/g, '/')}</div>
             <div class="label">Vigência</div>
           </div>
           <div class="metric-box">
@@ -920,6 +920,13 @@
               </tr>
             </thead>
             <tbody id="profTbody">${profRowsHtml}</tbody>
+            <tfoot>
+              <tr class="prof-totals-row">
+                <td class="prof-totals-label" colspan="2">Total geral</td>
+                <td class="prof-cell-metric"><span class="prof-metric-val">${window.Utils.formatarTotalHoras(dados.totalGeral.horas)}</span></td>
+                <td class="prof-cell-metric prof-cell-valor"><span class="prof-metric-val">${window.Utils.formatarMoeda(dados.totalGeral.valor)}</span></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>
