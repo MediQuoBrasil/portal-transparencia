@@ -69,8 +69,16 @@
     if (appShell) appShell.classList.remove('active');
     if (loginScreen) loginScreen.style.display = '';
 
-    // Re-iniciar One Tap
-    initOneTap();
+    // Restaurar botão customizado (pode ter sido escondido pelo fallback)
+    const customBtn = document.getElementById('googleSignInBtn');
+    if (customBtn) customBtn.style.display = '';
+
+    // Esconder container de fallback
+    const fallback = document.getElementById('googleBtnContainer');
+    if (fallback) fallback.style.display = 'none';
+
+    // Re-inicializar GIS
+    initGIS();
   };
 
   /**
@@ -134,56 +142,75 @@
 
   /**
    * Inicializa o Google Identity Services.
-   *
-   * Estratégia em duas camadas:
-   *  1. One Tap (prompt) → mini popup no canto superior direito, sem abrir janela.
-   *     Controlado por google.accounts.id.prompt(). É o método primário.
-   *  2. Botão renderizado (renderButton) → fallback para quando o One Tap
-   *     não pode ser exibido (dispensado muitas vezes, cookies de terceiros
-   *     bloqueados, FedCM indisponível, etc.). Mesmo assim, abre apenas
-   *     um popup com seleção de conta — não redireciona.
-   *
-   * O comportamento de "mini popup no canto" vs "nova janela" depende
-   * exclusivamente desta implementação. Não há API a ativar no GCP;
-   * basta criar as credenciais OAuth 2.0 normalmente.
+   * Apenas configura o callback — sem renderizar botão nem disparar prompt aqui.
    */
-  const initOneTap = () => {
+  const initGIS = () => {
     if (!window.google || !window.google.accounts || !window.google.accounts.id) {
       console.warn('[Auth] Biblioteca GIS não carregou.');
       return;
     }
 
-    const gis = window.google.accounts.id;
-
-    // Inicialização única — configura callback e preferências
-    gis.initialize({
+    window.google.accounts.id.initialize({
       client_id: window.AppConfig.GOOGLE_CLIENT_ID,
       callback: handleCredentialResponse,
-      auto_select: true,
-      use_fedcm_for_prompt: true,
+      auto_select: false,
+      cancel_on_tap_outside: true,
     });
+  };
 
-    // 1. Tentar One Tap (mini popup no canto)
-    gis.prompt((notification) => {
+  /**
+   * Aciona o Google One Tap (mini popup no canto superior direito).
+   * Se o One Tap estiver indisponível, renderiza o botão oficial do Google
+   * como fallback no container dedicado.
+   */
+  const triggerGoogleSignIn = () => {
+    if (!window.google || !window.google.accounts || !window.google.accounts.id) {
+      showLoginError('Google Sign In não disponível. Recarregue a página.');
+      return;
+    }
+
+    window.google.accounts.id.prompt((notification) => {
       if (notification.isNotDisplayed()) {
         console.log('[Auth] One Tap indisponível:', notification.getNotDisplayedReason());
+        renderGoogleFallback();
       }
       if (notification.isSkippedMoment()) {
         console.log('[Auth] One Tap dispensado:', notification.getSkippedReason());
       }
     });
+  };
 
-    // 2. Renderizar botão de fallback (sempre visível na tela de login)
-    const btnContainer = document.getElementById('googleBtnContainer');
-    if (btnContainer) {
-      gis.renderButton(btnContainer, {
-        type: 'standard',
-        shape: 'pill',
-        theme: 'outline',
-        text: 'signin_with',
-        size: 'large',
-        width: 300,
-      });
+  /**
+   * Renderiza o botão oficial do Google como fallback.
+   * Esconde o botão customizado e exibe o container do botão padrão.
+   */
+  const renderGoogleFallback = () => {
+    const container = document.getElementById('googleBtnContainer');
+    if (!container) return;
+
+    container.innerHTML = '';
+    container.style.display = 'flex';
+
+    window.google.accounts.id.renderButton(container, {
+      theme: 'filled_black',
+      size: 'large',
+      width: 280,
+      text: 'signin_with',
+      locale: 'pt-BR',
+    });
+
+    // Esconder botão customizado
+    const customBtn = document.getElementById('googleSignInBtn');
+    if (customBtn) customBtn.style.display = 'none';
+  };
+
+  /**
+   * Vincula o botão customizado ao fluxo de login.
+   */
+  const bindLoginButton = () => {
+    const btn = document.getElementById('googleSignInBtn');
+    if (btn) {
+      btn.addEventListener('click', triggerGoogleSignIn);
     }
   };
 
@@ -194,6 +221,12 @@
   const init = () => {
     loginScreen = document.getElementById('loginScreen');
     loginError = document.getElementById('loginError');
+
+    // Inicializar GIS (configura callback)
+    initGIS();
+
+    // Vincular botão customizado
+    bindLoginButton();
 
     const session = getSession();
 
@@ -208,7 +241,6 @@
     } else {
       // Sem sessão — exibir login
       loginScreen.style.display = '';
-      initOneTap();
     }
   };
 
