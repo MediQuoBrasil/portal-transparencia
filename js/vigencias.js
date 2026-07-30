@@ -81,6 +81,8 @@
 
   /**
    * Renderiza a lista de meses na sidebar.
+   * Usa estrutura inline para exibir a vigência no hover,
+   * sem tooltip absoluto que cause overflow.
    */
   const renderMeses = () => {
     const list = document.getElementById('monthList');
@@ -97,16 +99,22 @@
       const dot = document.createElement('span');
       dot.className = 'month-dot';
 
+      const content = document.createElement('span');
+      content.className = 'month-content';
+
       const label = document.createElement('span');
+      label.className = 'month-name';
       label.textContent = v.nome;
 
-      const tooltip = document.createElement('span');
-      tooltip.className = 'month-tooltip';
-      tooltip.textContent = tooltipVigencia(state.anoAtivo, v.mes);
+      const vigencia = document.createElement('span');
+      vigencia.className = 'month-vigencia';
+      vigencia.textContent = tooltipVigencia(state.anoAtivo, v.mes);
+
+      content.appendChild(label);
+      content.appendChild(vigencia);
 
       li.appendChild(dot);
-      li.appendChild(label);
-      li.appendChild(tooltip);
+      li.appendChild(content);
 
       li.addEventListener('click', () => { selecionarMes(v.mes); });
 
@@ -217,6 +225,7 @@
 
   /**
    * Renderiza um placeholder centralizado.
+   * Usa .placeholder-card para centralização vertical via flex.
    *
    * @param {string} icon - Emoji/ícone.
    * @param {string} title - Título.
@@ -224,7 +233,7 @@
    * @returns {string} HTML do placeholder.
    */
   const renderPlaceholder = (icon, title, text) => `
-    <div class="card">
+    <div class="card placeholder-card">
       <div class="vigencia-placeholder">
         <div class="vigencia-placeholder-icon">${icon}</div>
         <div class="vigencia-placeholder-title">${escapeHtml(title)}</div>
