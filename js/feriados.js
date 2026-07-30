@@ -351,6 +351,9 @@
 
     container.innerHTML = renderCalendar();
     bindCalendarEvents(container);
+
+    // Atualizar teto após salvar feriados
+    window.Vigencias.refreshTetoVigencia();
   };
 
   // ─── API pública ───────────────────────────────────────────
