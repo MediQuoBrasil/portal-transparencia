@@ -7,6 +7,50 @@
 (function () {
   'use strict';
 
+  // ─── Tema ───────────────────────────────────────────────
+
+  /**
+   * Inicializa o tema (lê do localStorage ou usa dark como padrão).
+   */
+  const initTheme = () => {
+    const saved = localStorage.getItem('theme');
+    const theme = (saved === 'light' || saved === 'dark') ? saved : 'dark';
+    document.documentElement.setAttribute('data-theme', theme);
+    updateThemeIcon(theme);
+  };
+
+  /**
+   * Alterna entre tema claro e escuro.
+   */
+  const toggleTheme = () => {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    const next = current === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('theme', next); } catch { /* ok */ }
+    updateThemeIcon(next);
+  };
+
+  /**
+   * Atualiza o ícone do botão de tema.
+   * @param {string} theme - 'dark' ou 'light'.
+   */
+  const updateThemeIcon = (theme) => {
+    const moon = document.getElementById('iconMoon');
+    const sun = document.getElementById('iconSun');
+    if (moon) moon.style.display = theme === 'dark' ? 'block' : 'none';
+    if (sun) sun.style.display = theme === 'light' ? 'block' : 'none';
+  };
+
+  /**
+   * Vincula o botão de tema ao toggle.
+   */
+  const bindThemeToggle = () => {
+    const btn = document.getElementById('themeToggle');
+    if (btn) btn.addEventListener('click', toggleTheme);
+  };
+
+  // ─── Toast ──────────────────────────────────────────────
+
   /** @type {number|null} */
   let toastTimer = null;
 
@@ -104,6 +148,9 @@
   });
 
   window.UI = {
+    initTheme,
+    toggleTheme,
+    bindThemeToggle,
     showToast,
     showLoading,
     hideLoading,
