@@ -477,7 +477,7 @@
         <tbody>
           ${rows}
           <tr class="prof-detail-total">
-            <td colspan="2">Total — ${p.totalPlantoes} plantão(ões)</td>
+            <td colspan="2">Total de plantões: ${p.totalPlantoes}</td>
             <td>${window.Utils.formatarTotalHoras(p.totalHoras)}</td>
             <td>${window.Utils.formatarMoeda(p.totalValor)}</td>
           </tr>
@@ -686,7 +686,7 @@
         <tbody>
           ${rows}
           <tr class="dia-detail-total">
-            <td>Total — ${sorted.length} plantão(ões)</td>
+            <td>Total de plantões: ${sorted.length}</td>
             <td colspan="2"></td>
             <td>${window.Utils.formatarTotalHoras(totais.horas)}</td>
             <td>${window.Utils.formatarMoeda(totais.valor)}</td>
