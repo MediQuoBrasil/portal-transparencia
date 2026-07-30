@@ -83,6 +83,49 @@
   };
 
   /**
+   * Normaliza qualquer representação de duração para o formato "HH:MM".
+   * Aceita: "HH:MM", Date string do Apps Script, número (fração de dia),
+   * ou fallback "00:00".
+   *
+   * @param {*} dur - Valor bruto de duração.
+   * @returns {string} Duração formatada "H:MM" ou "HH:MM".
+   */
+  const normalizarDuracao = (dur) => {
+    if (dur == null) return '00:00';
+
+    const pad = (n) => String(n).padStart(2, '0');
+
+    // Número: fração de dia (< 1.5) ou horas diretas
+    if (typeof dur === 'number') {
+      const totalH = dur < 1.5 ? dur * 24 : dur;
+      const h = Math.floor(totalH);
+      const m = Math.round((totalH - h) * 60);
+      return `${h}:${pad(m)}`;
+    }
+
+    const s = String(dur).trim();
+    if (!s) return '00:00';
+
+    // Já no formato "HH:MM" ou "H:MM"
+    if (/^\d{1,3}:\d{2}$/.test(s)) return s;
+
+    // Date string ("Sun Dec 31 1899 03:00:00 GMT…")
+    const timeMatch = s.match(/(\d{1,2}):(\d{2}):\d{2}/);
+    if (timeMatch) return `${parseInt(timeMatch[1], 10)}:${pad(parseInt(timeMatch[2], 10))}`;
+
+    // Fallback numérico em string
+    const num = parseFloat(s);
+    if (!Number.isNaN(num)) {
+      const totalH = num < 1.5 ? num * 24 : num;
+      const h = Math.floor(totalH);
+      const m = Math.round((totalH - h) * 60);
+      return `${h}:${pad(m)}`;
+    }
+
+    return '00:00';
+  };
+
+  /**
    * Formata total de horas para exibição em pt-BR.
    *
    * @param {number} horas - Total de horas decimais.
@@ -237,6 +280,7 @@
     formatarMoeda,
     formatarVigenciaCurta,
     duracaoParaHorasDecimal,
+    normalizarDuracao,
     formatarTotalHoras,
     formatarPorcentagem,
     distribuirPorcentagens,
