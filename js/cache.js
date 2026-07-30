@@ -46,6 +46,7 @@
    * @type {Object<string, string>}
    */
   const ACTION_TTL = {
+    init_dashboard: 'ESTAVEL',
     listar_anos: 'IMUTAVEL',
     listar_vigencias: 'IMUTAVEL',
     detalhe_vigencia: 'ESTAVEL',
@@ -61,15 +62,15 @@
    * @type {Object<string, string[]>}
    */
   const INVALIDATION_MAP = {
-    upload_vigencia: ['detalhe_vigencia', 'teto_vigencia', 'listar_vigencias'],
-    remover_vigencia: ['detalhe_vigencia', 'teto_vigencia', 'listar_vigencias'],
-    salvar_relacao: ['obter_relacao', 'teto_vigencia'],
-    salvar_relacao_datada: ['obter_relacao', 'listar_alteracoes', 'teto_vigencia'],
-    remover_alteracao: ['listar_alteracoes', 'teto_vigencia'],
-    salvar_feriados: ['listar_feriados', 'teto_vigencia'],
-    adicionar_feriado: ['listar_feriados', 'teto_vigencia'],
-    remover_feriado: ['listar_feriados', 'teto_vigencia'],
-    criar_ano: ['listar_anos', 'listar_vigencias'],
+    upload_vigencia: ['init_dashboard', 'detalhe_vigencia', 'teto_vigencia', 'listar_vigencias'],
+    remover_vigencia: ['init_dashboard', 'detalhe_vigencia', 'teto_vigencia', 'listar_vigencias'],
+    salvar_relacao: ['init_dashboard', 'obter_relacao', 'teto_vigencia'],
+    salvar_relacao_datada: ['init_dashboard', 'obter_relacao', 'listar_alteracoes', 'teto_vigencia'],
+    remover_alteracao: ['init_dashboard', 'listar_alteracoes', 'teto_vigencia'],
+    salvar_feriados: ['init_dashboard', 'listar_feriados', 'teto_vigencia'],
+    adicionar_feriado: ['init_dashboard', 'listar_feriados', 'teto_vigencia'],
+    remover_feriado: ['init_dashboard', 'listar_feriados', 'teto_vigencia'],
+    criar_ano: ['init_dashboard', 'listar_anos', 'listar_vigencias'],
   };
 
   // ─── Estado ────────────────────────────────────────────────
