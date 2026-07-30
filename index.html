@@ -3,186 +3,898 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Painel Financeiro — MediQuo</title>
+  <title>Portal da Transparência — Saúde MediQuo</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Nunito+Sans:wght@400;600;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+  <script src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
 
-  <!-- Google Identity Services -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <!-- Bibliotecas externas via CDN -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.4/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+  <link rel="stylesheet" href="css_portal.css">
 </head>
 <body>
 
-  <!-- ═══════════════════════════════════════════════════════
-       LOGIN SCREEN
-       ═══════════════════════════════════════════════════════ -->
-
-  <div class="login-screen" id="loginScreen">
-    <div class="login-card">
-      <div class="login-logo">📊</div>
-      <div class="login-title">Painel Financeiro</div>
-      <div class="login-subtitle">MediQuo — Pega Plantão</div>
-
-      <div class="login-error" id="loginError"></div>
-
-      <!-- Botão de fallback do Google (renderizado via JS pelo GIS).
-           O One Tap (mini popup no canto) é o método primário.
-           O botão aparece como alternativa caso o One Tap esteja
-           indisponível (dispensado, cookies bloqueados, etc.). -->
-      <div id="googleBtnContainer" style="display:flex;justify-content:center;"></div>
-
-      <div class="login-divider">Acesso restrito a usuários autorizados</div>
+  <header class="header">
+    <div class="header-icon">
+      <span class="iconify" data-icon="lucide:shield-check"></span>
     </div>
-  </div>
+    <div class="header-text">
+      <h1>Portal da Transparência</h1>
+      <p>Saúde MediQuo</p>
+    </div>
+  </header>
 
-
-  <!-- ═══════════════════════════════════════════════════════
-       APP SHELL
-       ═══════════════════════════════════════════════════════ -->
-
-  <div class="app-shell" id="appShell">
-
-    <!-- Overlay da sidebar (mobile) -->
-    <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-    <!-- ─── Sidebar ──────────────────────────────────── -->
-    <aside class="sidebar" id="sidebar">
-
-      <div class="sidebar-header">
-        <div class="sidebar-logo">📊</div>
-        <div class="sidebar-brand">
-          <span class="sidebar-brand-title">Painel Financeiro</span>
-          <span class="sidebar-brand-subtitle">MediQuo — Pega Plantão</span>
-        </div>
+  <main class="container">
+    <div class="upload-zone" id="uploadZone">
+      <div class="icon">
+        <span class="iconify" data-icon="lucide:upload"></span>
       </div>
+      <div class="label">Arraste o arquivo .xlsx aqui</div>
+      <div class="sublabel">ou <span id="uploadBtn">clique para selecionar</span></div>
+      <input type="file" id="fileInput" accept=".xlsx,.xls">
+    </div>
 
-      <!-- Seletor de ano -->
-      <div class="sidebar-section">
-        <div class="sidebar-section-title">Ano</div>
-        <div class="year-selector" id="yearSelector">
-          <!-- Renderizado via JS -->
+    <section id="previewSection" class="hidden">
+      <div class="card">
+        <div class="card-title">
+          <span class="iconify" data-icon="lucide:bar-chart-3"></span>
+          Resumo do relatório
         </div>
-      </div>
-
-      <!-- Lista de meses -->
-      <div class="sidebar-section">
-        <div class="sidebar-section-title">Vigência</div>
-        <ul class="month-list" id="monthList">
-          <!-- Renderizado via JS -->
-        </ul>
-      </div>
-
-      <!-- Rodapé da sidebar: info do usuário -->
-      <div class="sidebar-footer">
-        <div class="user-avatar" id="userAvatar">?</div>
-        <div class="user-info">
-          <div class="user-name" id="userName">—</div>
-          <div class="user-role" id="userRole">—</div>
-        </div>
-        <button type="button" class="btn-logout" id="btnLogout" title="Sair">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" stroke-width="2" stroke-linecap="round"
-               stroke-linejoin="round">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-            <polyline points="16 17 21 12 16 7"/>
-            <line x1="21" y1="12" x2="9" y2="12"/>
-          </svg>
-        </button>
-      </div>
-    </aside>
-
-    <!-- ─── Conteúdo principal ────────────────────────── -->
-    <div class="main-content">
-
-      <header class="main-header">
-        <div>
-          <button type="button" class="mobile-toggle" id="mobileToggle">☰</button>
-        </div>
-        <div>
-          <div class="main-header-title" id="mainHeaderTitle">Selecione uma vigência</div>
-          <div class="main-header-subtitle" id="mainHeaderSubtitle"></div>
-        </div>
-        <div><!-- Espaço reservado para ações futuras --></div>
-      </header>
-
-      <main class="main-body" id="mainBody">
-        <div class="card">
-          <div class="vigencia-placeholder">
-            <div class="vigencia-placeholder-icon">👈</div>
-            <div class="vigencia-placeholder-title">Selecione uma vigência</div>
-            <div class="vigencia-placeholder-text">
-              Escolha um ano e mês na barra lateral para visualizar os dados da vigência.
-            </div>
+        <div class="metrics">
+          <div class="metric-box">
+            <div class="value" id="metVigencia">—</div>
+            <div class="label">Vigência</div>
+          </div>
+          <div class="metric-box">
+            <div class="value" id="metProfs">—</div>
+            <div class="label">Profissionais</div>
+          </div>
+          <div class="metric-box">
+            <div class="value" id="metPlantoes">—</div>
+            <div class="label">Plantões</div>
+          </div>
+          <div class="metric-box">
+            <div class="value" id="metHoras">—</div>
+            <div class="label">Horas totais</div>
+          </div>
+          <div class="metric-box">
+            <div class="value" id="metValor">—</div>
+            <div class="label">Valor total</div>
           </div>
         </div>
-      </main>
-    </div>
-  </div>
+        <button class="reset-link" id="resetBtn" type="button">
+          <span class="iconify" data-icon="lucide:arrow-left"></span>
+          Enviar outro arquivo
+        </button>
+      </div>
 
+      <div class="card">
+        <div class="card-title">
+          <span class="iconify" data-icon="lucide:users"></span>
+          Profissionais detectados
+        </div>
+        <ul class="prof-list" id="profList"></ul>
+      </div>
 
-  <!-- ═══════════════════════════════════════════════════════
-       LOADING OVERLAY
-       ═══════════════════════════════════════════════════════ -->
+      <div class="actions">
+        <button class="btn btn-primary" id="btnDia" disabled>
+          <span class="iconify" data-icon="lucide:calendar-days"></span>
+          Baixar Relatório por Dia (.xlsx)
+        </button>
+        <button class="btn btn-primary" id="btnProf" disabled>
+          <span class="iconify" data-icon="lucide:file-spreadsheet"></span>
+          Baixar Relatório por Profissional (.xlsx)
+        </button>
+        <button class="btn btn-secondary" id="btnIndiv" disabled>
+          <span class="iconify" data-icon="lucide:archive"></span>
+          Baixar Relatórios Individuais (.zip)
+        </button>
+      </div>
 
-  <div class="loading-overlay" id="loadingOverlay">
-    <div class="spinner spinner-lg"></div>
-    <div class="loading-text">Carregando...</div>
-  </div>
+      <div class="feedback" id="feedback"></div>
+      <div class="progress-bar-container" id="progressContainer">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+    </section>
 
-
-  <!-- ═══════════════════════════════════════════════════════
-       SCRIPTS
-       ═══════════════════════════════════════════════════════ -->
-
-  <script src="js/config.js"></script>
-  <script src="js/api.js"></script>
-  <script src="js/ui.js"></script>
-  <script src="js/auth.js"></script>
-  <script src="js/vigencias.js"></script>
-  <script src="js/app.js"></script>
+    <div class="footer">Portal da Transparência — Saúde MediQuo</div>
+  </main>
 
   <script>
-    // Iniciar autenticação quando DOM e GIS estiverem prontos
-    (function () {
-      'use strict';
+  (function () {
+    'use strict';
 
-      /**
-       * Aguarda o carregamento do Google Identity Services
-       * e depois inicializa o módulo de autenticação.
-       */
-      const boot = () => {
-        if (window.google && window.google.accounts && window.google.accounts.id) {
-          window.Auth.init();
-        } else {
-          // GIS ainda não carregou — retry com polling limitado
-          let tentativas = 0;
-          const MAX_TENTATIVAS = 20;
+    // ============================================================
+    //  REFERÊNCIAS DOM
+    // ============================================================
+    const uploadZone     = document.getElementById('uploadZone');
+    const fileInput      = document.getElementById('fileInput');
+    const uploadBtn      = document.getElementById('uploadBtn');
+    const previewSection = document.getElementById('previewSection');
+    const resetBtn       = document.getElementById('resetBtn');
+    const btnDia         = document.getElementById('btnDia');
+    const btnProf        = document.getElementById('btnProf');
+    const btnIndiv       = document.getElementById('btnIndiv');
+    const feedbackEl     = document.getElementById('feedback');
+    const progressCont   = document.getElementById('progressContainer');
+    const progressBar    = document.getElementById('progressBar');
 
-          const poll = setInterval(() => {
-            tentativas += 1;
-            if (window.google && window.google.accounts && window.google.accounts.id) {
-              clearInterval(poll);
-              window.Auth.init();
-            } else if (tentativas >= MAX_TENTATIVAS) {
-              clearInterval(poll);
-              console.error('[Boot] Google Identity Services não carregou após timeout.');
-              const loginError = document.getElementById('loginError');
-              if (loginError) {
-                loginError.textContent = 'Erro ao carregar serviço de autenticação. Recarregue a página.';
-                loginError.classList.add('show');
-              }
-            }
-          }, 500);
+    let dadosRelatorio = null;
+
+    // ============================================================
+    //  UTILITÁRIOS
+    // ============================================================
+
+    /** Formata valor para moeda brasileira: R$ 1.234,00 */
+    function formatarMoeda(valor) {
+      return 'R$ ' + Number(valor).toLocaleString('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
+
+    /** Formata vigência "DD/MM/AAAA~DD/MM/AAAA" → "DD-MM a DD-MM" */
+    function formatarVigenciaCurta(vigStr) {
+      const partes = vigStr.split('~');
+      if (partes.length !== 2) return vigStr;
+      const ini = partes[0].trim();
+      const fim = partes[1].trim();
+      const iniCurto = ini.substring(0, 5).replace(/\//g, '-');
+      const fimCurto = fim.substring(0, 5).replace(/\//g, '-');
+      return iniCurto + ' a ' + fimCurto;
+    }
+
+    /** Converte "HH:MM" em horas decimais (ex: "03:00" → 3, "01:30" → 1.5) */
+    function duracaoParaHorasDecimal(dur) {
+      if (!dur || typeof dur !== 'string') return 0;
+      const parts = dur.split(':');
+      if (parts.length !== 2) return 0;
+      const h = parseInt(parts[0], 10) || 0;
+      const m = parseInt(parts[1], 10) || 0;
+      return h + m / 60;
+    }
+
+    /** Formata total de horas como "X horas" ou "X,Y horas" (pt-BR) */
+    function formatarTotalHoras(horas) {
+      if (Number.isInteger(horas)) {
+        return horas + ' horas';
+      }
+      // Usa vírgula como separador decimal (pt-BR)
+      return horas.toLocaleString('pt-BR', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 1
+      }) + ' horas';
+    }
+
+    /** Extrai apenas a data "DD/MM/AAAA" de "DD/MM/AAAA HH:MM" */
+    function extrairData(dataHora) {
+      return dataHora ? dataHora.substring(0, 10) : '';
+    }
+
+    /** Converte "DD/MM/AAAA" para Date sortável */
+    function dataParaSort(dataStr) {
+      const p = dataStr.split('/');
+      return new Date(parseInt(p[2]), parseInt(p[1]) - 1, parseInt(p[0]));
+    }
+
+    function mostrarFeedback(msg, tipo) {
+      feedbackEl.className = 'feedback ' + tipo;
+      const iconMap = {
+        info: '<div class="spinner"></div>',
+        success: '<span class="iconify" data-icon="lucide:check-circle-2"></span>',
+        error: '<span class="iconify" data-icon="lucide:alert-circle"></span>',
+      };
+      feedbackEl.innerHTML = (iconMap[tipo] || '') + '&ensp;' + msg;
+      feedbackEl.style.display = 'flex';
+    }
+
+    function esconderFeedback() { feedbackEl.style.display = 'none'; }
+
+    function atualizarProgresso(atual, total) {
+      progressCont.style.display = 'block';
+      progressBar.style.width = Math.round((atual / total) * 100) + '%';
+    }
+
+    function esconderProgresso() {
+      progressCont.style.display = 'none';
+      progressBar.style.width = '0%';
+    }
+
+    // ============================================================
+    //  UPLOAD E DRAG-AND-DROP
+    // ============================================================
+
+    uploadBtn.addEventListener('click', (e) => { e.stopPropagation(); fileInput.click(); });
+    uploadZone.addEventListener('click', () => fileInput.click());
+    uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+    uploadZone.addEventListener('dragleave', () => { uploadZone.classList.remove('drag-over'); });
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('drag-over');
+      if (e.dataTransfer.files.length > 0) processarArquivo(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length > 0) processarArquivo(fileInput.files[0]);
+    });
+    resetBtn.addEventListener('click', resetar);
+
+    function resetar() {
+      dadosRelatorio = null;
+      fileInput.value = '';
+      previewSection.classList.add('hidden');
+      uploadZone.classList.remove('hidden');
+      esconderFeedback();
+      esconderProgresso();
+      btnDia.disabled = true;
+      btnProf.disabled = true;
+      btnIndiv.disabled = true;
+    }
+
+    // ============================================================
+    //  PROCESSAMENTO DO ARQUIVO .XLSX
+    // ============================================================
+
+    function processarArquivo(file) {
+      if (!file.name.match(/\.xlsx?$/i)) {
+        mostrarFeedback('Por favor, envie um arquivo .xlsx válido.', 'error');
+        return;
+      }
+      mostrarFeedback('Lendo arquivo...', 'info');
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array', raw: true });
+          const sheetName = workbook.SheetNames[0];
+          const sheet = workbook.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
+          dadosRelatorio = parsearPlanilha(rows);
+          exibirPreview();
+          esconderFeedback();
+        } catch (err) {
+          console.error(err);
+          mostrarFeedback('Erro ao processar o arquivo: ' + err.message, 'error');
         }
       };
+      reader.readAsArrayBuffer(file);
+    }
 
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', boot);
-      } else {
-        boot();
+    // ============================================================
+    //  PARSING — extrai profissionais e plantões do .xlsx fonte
+    // ============================================================
+
+    function parsearPlanilha(rows) {
+      // 1) Vigência da linha 3 (índice 2): "21/06/2026~20/07/2026"
+      const vigenciaRaw = String(rows[2][0]).trim();
+      const vigenciaParts = vigenciaRaw.split('~');
+      const vigencia = {
+        inicio: vigenciaParts[0].trim(),
+        fim: vigenciaParts[1].trim(),
+        raw: vigenciaRaw,
+        curta: formatarVigenciaCurta(vigenciaRaw)
+      };
+
+      const profissionais = [];
+      let profAtual = null;
+      const regexProf = /^(.+?)\s{2}-\s{2}(\d+\/[A-Z]{2})$/;
+
+      // 2) Iterar a partir da linha 5 (índice 4)
+      //    Novo formato com 12 colunas:
+      //    A(0):Setor  B(1):Tipo  C(2):Início  D(3):Fim
+      //    E(4):Entrada  F(5):Saída  G(6):Obs Prof  H(7):Obs Interna
+      //    I(8):Duração(h)  J(9):Dur.Considerada  K(10):Valor  L(11):Valor Considerado
+      //    Colunas usadas: C(Início), D(Fim), I(Duração), K(Valor)
+      for (let i = 4; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row) continue;
+
+        const colA = row[0] != null ? String(row[0]).trim() : null;
+        const colB = row[1] != null ? String(row[1]).trim() : null;
+        const colC = row[2] != null ? String(row[2]).trim() : null;
+        const colD = row[3] != null ? String(row[3]).trim() : null;
+        const colI = row[8] != null ? String(row[8]).trim() : null;   // Duração (h)
+        const colK = row[10];                                          // Valor
+
+        // Parar no "Total Geral"
+        if (colA === 'Total Geral') break;
+
+        // Linha vazia (checa as colunas relevantes)
+        if (!colA && !colB && !colC && !colD && !colI && colK == null) continue;
+
+        // Linha de profissional (só coluna A preenchida com o padrão nome - CRM)
+        if (colA && !colB && !colC) {
+          const match = colA.match(regexProf);
+          if (match) {
+            if (profAtual) profissionais.push(profAtual);
+            profAtual = {
+              nome: match[1].trim(),
+              crm: match[2].trim(),
+              plantoes: [],
+              totalPlantoes: 0,
+              totalHoras: 0,
+              totalValor: 0
+            };
+            continue;
+          }
+        }
+
+        // Cabeçalho de colunas
+        if (colA === 'Setor') continue;
+
+        // Total do profissional (coluna C = "Total")
+        if (colC === 'Total' && profAtual) {
+          let somaValor = 0;
+          let somaHoras = 0;
+          profAtual.plantoes.forEach(p => {
+            somaValor += p.valor;
+            somaHoras += p.duracaoHoras;
+          });
+          profAtual.totalPlantoes = profAtual.plantoes.length;
+          profAtual.totalHoras = somaHoras;
+          profAtual.totalValor = somaValor;
+          continue;
+        }
+
+        // Linha de plantão (colC = "DD/MM/AAAA HH:MM")
+        if (colC && profAtual) {
+          if (/^\d{2}\/\d{2}\/\d{4}\s\d{2}:\d{2}$/.test(colC)) {
+            const valor = typeof colK === 'number' ? colK : parseInt(String(colK), 10) || 0;
+            const duracaoStr = colI || '00:00';
+            profAtual.plantoes.push({
+              inicio: colC,
+              fim: colD || '',
+              duracaoStr: duracaoStr,
+              duracaoHoras: duracaoParaHorasDecimal(duracaoStr),
+              valor: valor
+            });
+          }
+        }
       }
-    })();
-  </script>
 
+      // Último profissional
+      if (profAtual) {
+        if (profAtual.totalPlantoes === 0 && profAtual.plantoes.length > 0) {
+          let somaValor = 0;
+          let somaHoras = 0;
+          profAtual.plantoes.forEach(p => {
+            somaValor += p.valor;
+            somaHoras += p.duracaoHoras;
+          });
+          profAtual.totalPlantoes = profAtual.plantoes.length;
+          profAtual.totalHoras = somaHoras;
+          profAtual.totalValor = somaValor;
+        }
+        profissionais.push(profAtual);
+      }
+
+      // 3) Totais gerais
+      let totalGeralPlantoes = 0;
+      let totalGeralHoras = 0;
+      let totalGeralValor = 0;
+      profissionais.forEach(p => {
+        totalGeralPlantoes += p.totalPlantoes;
+        totalGeralHoras += p.totalHoras;
+        totalGeralValor += p.totalValor;
+      });
+
+      return {
+        vigencia,
+        profissionais,
+        totalGeral: {
+          plantoes: totalGeralPlantoes,
+          horas: totalGeralHoras,
+          valor: totalGeralValor
+        }
+      };
+    }
+
+    // ============================================================
+    //  PREVIEW
+    // ============================================================
+
+    function exibirPreview() {
+      const d = dadosRelatorio;
+      document.getElementById('metVigencia').textContent = d.vigencia.curta;
+      document.getElementById('metProfs').textContent = d.profissionais.length;
+      document.getElementById('metPlantoes').textContent = d.totalGeral.plantoes;
+      document.getElementById('metHoras').textContent = formatarTotalHoras(d.totalGeral.horas);
+      document.getElementById('metValor').textContent = formatarMoeda(d.totalGeral.valor);
+
+      const lista = document.getElementById('profList');
+      lista.innerHTML = '';
+      d.profissionais.forEach(p => {
+        const li = document.createElement('li');
+        li.textContent = p.nome + '  (' + p.crm + ')';
+        lista.appendChild(li);
+      });
+
+      uploadZone.classList.add('hidden');
+      previewSection.classList.remove('hidden');
+      btnDia.disabled = false;
+      btnProf.disabled = false;
+      btnIndiv.disabled = false;
+    }
+
+    // ============================================================
+    //  ESTILOS EXCELJS COMPARTILHADOS
+    // ============================================================
+
+    const ROXO_HEX = 'FF491E9C';
+    const BORDA_FINA = {
+      top:    { style: 'thin', color: { argb: 'FF000000' } },
+      left:   { style: 'thin', color: { argb: 'FF000000' } },
+      bottom: { style: 'thin', color: { argb: 'FF000000' } },
+      right:  { style: 'thin', color: { argb: 'FF000000' } }
+    };
+    const FONT_HEADER_BRANCO = { bold: true, size: 12, color: { argb: 'FFFFFFFF' }, name: 'Calibri' };
+    const FONT_COLUNA        = { bold: true, size: 12, color: { argb: 'FF000000' }, name: 'Calibri' };
+    const FONT_DADO          = { bold: false, size: 12, color: { argb: 'FF000000' }, name: 'Calibri' };  // mudado para size 12
+    const FONT_TOTAL_PRETO   = { bold: true, size: 12, color: { argb: 'FF000000' }, name: 'Calibri' };
+    const FILL_ROXO          = { type: 'pattern', pattern: 'solid', fgColor: { argb: ROXO_HEX } };
+    const NUMFMT_VALOR_DATA  = '"R$" #,##0.00';
+    const NUMFMT_VALOR_TOTAL = '"R$" #,##0;[Red]-"R$" #,##0';
+
+    /** Aplica borda fina + font em todas as colunas de uma row */
+    function aplicarEstiloLinha(ws, rowNum, numCols, font) {
+      for (let c = 1; c <= numCols; c++) {
+        const cell = ws.getCell(rowNum, c);
+        cell.font = font;
+        cell.border = BORDA_FINA;
+      }
+    }
+
+    // ============================================================
+    //  OUTPUT 1: RELATÓRIO POR DIA (.xlsx)
+    //  Colunas: Data | Profissional | Início | Fim | Duração (h) | Valor (R$)
+    //  Com TOTAL por dia e TOTAL geral
+    // ============================================================
+
+    btnDia.addEventListener('click', gerarRelatorioPorDia);
+
+    async function gerarRelatorioPorDia() {
+      if (!dadosRelatorio) return;
+      mostrarFeedback('Gerando relatório por dia...', 'info');
+      btnDia.disabled = true; btnProf.disabled = true; btnIndiv.disabled = true;
+      await new Promise(r => setTimeout(r, 50));
+
+      try {
+        const d = dadosRelatorio;
+        const NUM_COLS = 6;
+
+        // 1) Reunir todos os plantões
+        const todosPlantoes = [];
+        d.profissionais.forEach(prof => {
+          prof.plantoes.forEach(pl => {
+            todosPlantoes.push({
+              data: extrairData(pl.inicio),
+              profissional: prof.nome,
+              inicio: pl.inicio,
+              fim: pl.fim,
+              duracaoHoras: pl.duracaoHoras,
+              valor: pl.valor
+            });
+          });
+        });
+
+        // 2) Ordenar por data + profissional
+        todosPlantoes.sort((a, b) => {
+          const da = dataParaSort(a.data);
+          const db = dataParaSort(b.data);
+          if (da.getTime() !== db.getTime()) return da - db;
+          return a.profissional.localeCompare(b.profissional, 'pt-BR');
+        });
+
+        // 3) Agrupar por data
+        const gruposPorDia = {};
+        const ordemDias = [];
+        todosPlantoes.forEach(p => {
+          if (!gruposPorDia[p.data]) {
+            gruposPorDia[p.data] = [];
+            ordemDias.push(p.data);
+          }
+          gruposPorDia[p.data].push(p);
+        });
+
+        // 4) Criar workbook
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Relatório por Dia');
+
+        // Larguras das colunas
+        ws.columns = [
+          { key: 'A', width: 12.86 },
+          { key: 'B', width: 35.86 },
+          { key: 'C', width: 18.86 },
+          { key: 'D', width: 18.86 },
+          { key: 'E', width: 13.57 },
+          { key: 'F', width: 14.86 }
+        ];
+
+        let totalGeralHoras = 0;
+        let totalGeralValor = 0;
+
+        // 5) Montar planilha
+        ordemDias.forEach((dia, idx) => {
+          const plantoesDia = gruposPorDia[dia];
+
+          // --- Cabeçalho do dia: "DD/MM/AAAA:" merged A:F, roxo, branco bold, center ---
+          const rowH = ws.addRow([dia + ':', '', '', '', '', '']);
+          ws.mergeCells(rowH.number, 1, rowH.number, NUM_COLS);
+          for (let c = 1; c <= NUM_COLS; c++) {
+            const cell = ws.getCell(rowH.number, c);
+            cell.font = FONT_HEADER_BRANCO;
+            cell.fill = FILL_ROXO;
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          }
+
+          // --- Cabeçalho de colunas: bold, bordas ---
+          const rowC = ws.addRow(['Data', 'Profissional', 'Início', 'Fim', 'Duração (h)', 'Valor (R$)']);
+          for (let c = 1; c <= NUM_COLS; c++) {
+            const cell = ws.getCell(rowC.number, c);
+            cell.font = FONT_COLUNA;
+            cell.border = BORDA_FINA;
+            if (c >= 5) cell.alignment = { horizontal: 'center' };
+          }
+
+          // --- Linhas de dados ---
+          let somaHorasDia = 0;
+          let somaValorDia = 0;
+
+          plantoesDia.forEach(p => {
+            const rowD = ws.addRow([p.data, p.profissional, p.inicio, p.fim, p.duracaoHoras, p.valor]);
+            for (let c = 1; c <= NUM_COLS; c++) {
+              const cell = ws.getCell(rowD.number, c);
+              cell.font = FONT_DADO;
+              cell.border = BORDA_FINA;
+              if (c >= 5) cell.alignment = { horizontal: 'center' };
+            }
+            // Formato R$ na coluna Valor (F)
+            ws.getCell(rowD.number, NUM_COLS).numFmt = NUMFMT_VALOR_DATA;
+
+            somaHorasDia += p.duracaoHoras;
+            somaValorDia += p.valor;
+          });
+
+          totalGeralHoras += somaHorasDia;
+          totalGeralValor += somaValorDia;
+
+          // --- TOTAL do dia: merged A:D, bordas, bold ---
+          const rowT = ws.addRow(['TOTAL', '', '', '', formatarTotalHoras(somaHorasDia), somaValorDia]);
+          ws.mergeCells(rowT.number, 1, rowT.number, 4);
+          for (let c = 1; c <= NUM_COLS; c++) {
+            const cell = ws.getCell(rowT.number, c);
+            cell.font = FONT_TOTAL_PRETO;
+            cell.border = BORDA_FINA;
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          }
+          ws.getCell(rowT.number, NUM_COLS).numFmt = NUMFMT_VALOR_TOTAL;
+
+          // Linha vazia separadora (exceto último grupo)
+          if (idx < ordemDias.length - 1) {
+            ws.addRow([]);
+          }
+        });
+
+        // --- TOTAL GERAL: merged A:D, roxo, branco bold ---
+        ws.addRow([]);
+        const rowG = ws.addRow(['TOTAL:', '', '', '', formatarTotalHoras(totalGeralHoras), totalGeralValor]);
+        ws.mergeCells(rowG.number, 1, rowG.number, 4);
+        for (let c = 1; c <= NUM_COLS; c++) {
+          const cell = ws.getCell(rowG.number, c);
+          cell.font = FONT_HEADER_BRANCO;
+          cell.fill = FILL_ROXO;
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        }
+        ws.getCell(rowG.number, NUM_COLS).numFmt = NUMFMT_VALOR_TOTAL;
+
+        // 6) Gerar e baixar
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+        saveAs(blob, 'Relatório por dia - Clínica geral - ' + d.vigencia.curta + '.xlsx');
+        mostrarFeedback('Relatório por dia gerado com sucesso!', 'success');
+      } catch (err) {
+        console.error(err);
+        mostrarFeedback('Erro ao gerar relatório: ' + err.message, 'error');
+      } finally {
+        btnDia.disabled = false; btnProf.disabled = false; btnIndiv.disabled = false;
+      }
+    }
+
+    // ============================================================
+    //  OUTPUT 2: RELATÓRIO POR PROFISSIONAL (.xlsx)
+    //  Colunas: Início | Fim | Duração (h) | Valor (R$)
+    //  Com TOTAL por profissional e TOTAL geral
+    // ============================================================
+
+    btnProf.addEventListener('click', gerarRelatorioPorProfissional);
+
+    async function gerarRelatorioPorProfissional() {
+      if (!dadosRelatorio) return;
+      mostrarFeedback('Gerando relatório por profissional...', 'info');
+      btnDia.disabled = true; btnProf.disabled = true; btnIndiv.disabled = true;
+      await new Promise(r => setTimeout(r, 50));
+
+      try {
+        const d = dadosRelatorio;
+        const NUM_COLS = 4;
+
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Relatório por Profissional');
+
+        // Larguras das colunas
+        ws.columns = [
+          { key: 'A', width: 19 },
+          { key: 'B', width: 19 },
+          { key: 'C', width: 13.86 },
+          { key: 'D', width: 15 }
+        ];
+
+        let totalGeralHoras = 0;
+        let totalGeralValor = 0;
+
+        // Profissionais ordenados alfabeticamente
+        const profsOrdenados = [...d.profissionais].sort((a, b) =>
+          a.nome.localeCompare(b.nome, 'pt-BR')
+        );
+
+        profsOrdenados.forEach((prof, idx) => {
+          // --- Cabeçalho do profissional: merged A:D, roxo, branco bold ---
+          const nomeHeader = prof.nome + ' (' + prof.crm + '):';
+          const rowH = ws.addRow([nomeHeader, '', '', '']);
+          ws.mergeCells(rowH.number, 1, rowH.number, NUM_COLS);
+          for (let c = 1; c <= NUM_COLS; c++) {
+            const cell = ws.getCell(rowH.number, c);
+            cell.font = FONT_HEADER_BRANCO;
+            cell.fill = FILL_ROXO;
+            cell.alignment = { vertical: 'middle' };
+            if (c >= 3) cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          }
+
+          // --- Cabeçalho de colunas: bold, bordas ---
+          const rowC = ws.addRow(['Início', 'Fim', 'Duração (h)', 'Valor (R$)']);
+          for (let c = 1; c <= NUM_COLS; c++) {
+            const cell = ws.getCell(rowC.number, c);
+            cell.font = FONT_COLUNA;
+            cell.border = BORDA_FINA;
+            if (c >= 3) cell.alignment = { horizontal: 'center' };
+          }
+
+          // --- Linhas de dados ---
+          prof.plantoes.forEach(p => {
+            const rowD = ws.addRow([p.inicio, p.fim, p.duracaoHoras, p.valor]);
+            for (let c = 1; c <= NUM_COLS; c++) {
+              const cell = ws.getCell(rowD.number, c);
+              cell.font = FONT_DADO;
+              cell.border = BORDA_FINA;
+              if (c >= 3) cell.alignment = { horizontal: 'center' };
+            }
+            ws.getCell(rowD.number, NUM_COLS).numFmt = NUMFMT_VALOR_DATA;
+          });
+
+          totalGeralHoras += prof.totalHoras;
+          totalGeralValor += prof.totalValor;
+
+          // --- TOTAL do profissional: merged A:B, bold, bordas ---
+          const rowT = ws.addRow(['TOTAL:', '', formatarTotalHoras(prof.totalHoras), prof.totalValor]);
+          ws.mergeCells(rowT.number, 1, rowT.number, 2);
+          for (let c = 1; c <= NUM_COLS; c++) {
+            const cell = ws.getCell(rowT.number, c);
+            cell.font = FONT_TOTAL_PRETO;
+            cell.border = BORDA_FINA;
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+          }
+          ws.getCell(rowT.number, NUM_COLS).numFmt = NUMFMT_VALOR_TOTAL;
+
+          // Linha vazia separadora (exceto último)
+          if (idx < profsOrdenados.length - 1) {
+            ws.addRow([]);
+          }
+        });
+
+        // --- TOTAL GERAL: merged A:B, roxo, branco bold ---
+        ws.addRow([]);
+        const rowG = ws.addRow(['TOTAL:', '', formatarTotalHoras(totalGeralHoras), totalGeralValor]);
+        ws.mergeCells(rowG.number, 1, rowG.number, 2);
+        for (let c = 1; c <= NUM_COLS; c++) {
+          const cell = ws.getCell(rowG.number, c);
+          cell.font = FONT_HEADER_BRANCO;
+          cell.fill = FILL_ROXO;
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        }
+        ws.getCell(rowG.number, NUM_COLS).numFmt = NUMFMT_VALOR_TOTAL;
+
+        // Gerar e baixar
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+        saveAs(blob, 'Relatório por profissional - Clínica geral - ' + d.vigencia.curta + '.xlsx');
+        mostrarFeedback('Relatório por profissional gerado com sucesso!', 'success');
+      } catch (err) {
+        console.error(err);
+        mostrarFeedback('Erro ao gerar relatório: ' + err.message, 'error');
+      } finally {
+        btnDia.disabled = false; btnProf.disabled = false; btnIndiv.disabled = false;
+      }
+    }
+
+    // ============================================================
+    //  OUTPUT 3: RELATÓRIOS INDIVIDUAIS (ZIP de PDFs)
+    //  Colunas: Início | Fim | Duração (h) | Valor (R$)
+    //  Com TOTAL no final
+    // ============================================================
+
+    btnIndiv.addEventListener('click', gerarRelatoriosIndividuais);
+
+    async function gerarRelatoriosIndividuais() {
+      if (!dadosRelatorio) return;
+      btnIndiv.disabled = true; btnDia.disabled = true; btnProf.disabled = true;
+      const d = dadosRelatorio;
+      const total = d.profissionais.length;
+      mostrarFeedback('Gerando PDF 1 de ' + total + '...', 'info');
+      atualizarProgresso(0, total);
+
+      try {
+        const zip = new JSZip();
+
+        for (let i = 0; i < total; i++) {
+          const prof = d.profissionais[i];
+          mostrarFeedback('Gerando PDF ' + (i + 1) + ' de ' + total + ' — ' + prof.nome + '...', 'info');
+          atualizarProgresso(i + 1, total);
+          const pdfBlob = gerarPDFIndividual(prof, d.vigencia);
+          const nomePDF = 'Relatório individual - Clínica geral - ' + prof.nome + ' - ' + d.vigencia.curta + '.pdf';
+          zip.file(nomePDF, pdfBlob);
+          await new Promise(r => setTimeout(r, 30));
+        }
+
+        mostrarFeedback('Compactando arquivos...', 'info');
+        const zipBlob = await zip.generateAsync({
+          type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 }
+        });
+        saveAs(zipBlob, 'Relatórios individuais - Clínica geral - ' + d.vigencia.curta + '.zip');
+        mostrarFeedback('Relatórios individuais gerados com sucesso! (' + total + ' PDFs)', 'success');
+        esconderProgresso();
+      } catch (err) {
+        console.error(err);
+        mostrarFeedback('Erro ao gerar relatórios: ' + err.message, 'error');
+        esconderProgresso();
+      } finally {
+        btnIndiv.disabled = false; btnDia.disabled = false; btnProf.disabled = false;
+      }
+    }
+
+    // ============================================================
+    //  PDF INDIVIDUAL (jsPDF + AutoTable)
+    //  4 colunas: Início | Fim | Duração (h) | Valor (R$)
+    // ============================================================
+
+    function gerarPDFIndividual(prof, vigencia) {
+      if (!window.jspdf || !window.jspdf.jsPDF) {
+        throw new Error('Biblioteca jsPDF não carregou. Recarregue a página e tente novamente.');
+      }
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+      const roxo = [73, 30, 156];
+      const cinzaClaro = [245, 245, 247];
+      const textoPrincipal = [26, 26, 46];
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      // --- CABEÇALHO ---
+      doc.setFillColor(...roxo);
+      doc.rect(0, 0, pageWidth, 18, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.setTextColor(255, 255, 255);
+      doc.text('Relatório Individual de Plantões', 15, 8);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.text('MediQuo — Clínica Geral', 15, 14);
+      doc.setFontSize(8);
+      doc.text('Vigência: ' + vigencia.inicio + ' a ' + vigencia.fim, pageWidth - 15, 8, { align: 'right' });
+
+      // --- DADOS DO PROFISSIONAL ---
+      doc.setTextColor(...textoPrincipal);
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text(prof.nome, 15, 26);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(107, 114, 128);
+      doc.text('CRM: ' + prof.crm, 15, 31);
+
+      // --- TABELA: 4 colunas (sem Setor e Tipo) ---
+      const colunas = [
+        { header: 'Início',      dataKey: 'inicio' },
+        { header: 'Fim',         dataKey: 'fim' },
+        { header: 'Duração (h)', dataKey: 'duracao' },
+        { header: 'Valor (R$)',  dataKey: 'valor' }
+      ];
+
+      const linhas = prof.plantoes.map(p => ({
+        inicio:  p.inicio,
+        fim:     p.fim,
+        duracao: p.duracaoHoras,
+        valor:   formatarMoeda(p.valor)
+      }));
+
+      // Linha de total
+      linhas.push({
+        inicio:  'TOTAL:',
+        fim:     '',
+        duracao: formatarTotalHoras(prof.totalHoras),
+        valor:   formatarMoeda(prof.totalValor)
+      });
+
+      const totalRowIndex = linhas.length - 1;
+
+      doc.autoTable({
+        columns: colunas,
+        body: linhas,
+        startY: 36,
+        theme: 'grid',
+        styles: {
+          font: 'helvetica',
+          fontSize: 7,
+          cellPadding: { top: 0.5, right: 1.5, bottom: 0.5, left: 1.5 },
+          lineColor: [180, 180, 180],
+          lineWidth: 0.3,
+          textColor: textoPrincipal
+        },
+        headStyles: {
+          fillColor: roxo,
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          fontSize: 7,
+          cellPadding: { top: 0.7, right: 1.5, bottom: 0.7, left: 1.5 }
+        },
+        alternateRowStyles: {
+          fillColor: cinzaClaro
+        },
+        columnStyles: {
+          inicio:  { cellWidth: 55 },
+          fim:     { cellWidth: 55 },
+          duracao: { cellWidth: 35, halign: 'center' },
+          valor:   { cellWidth: 45, halign: 'center' }
+        },
+        margin: { left: 15, right: 15 },
+        didParseCell: function (data) {
+          // Estilizar a linha de TOTAL
+          if (data.section === 'body' && data.row.index === totalRowIndex) {
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.fillColor = cinzaClaro;
+          }
+        },
+        didDrawPage: function (data) {
+          const pageHeight = doc.internal.pageSize.getHeight();
+          doc.setFontSize(7);
+          doc.setTextColor(160, 160, 160);
+          doc.text(
+            'Página ' + doc.internal.getCurrentPageInfo().pageNumber,
+            pageWidth - 15, pageHeight - 8, { align: 'right' }
+          );
+        }
+      });
+
+      // --- RODAPÉ ---
+      const finalY = doc.lastAutoTable.finalY + 5;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(140, 140, 140);
+      doc.text('Relatório gerado automaticamente — MediQuo / Pega Plantão', 15, finalY);
+
+      return doc.output('blob');
+    }
+
+  })();
+  </script>
 </body>
 </html>
