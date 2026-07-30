@@ -38,18 +38,47 @@
   };
 
   /**
-   * Converte duração "HH:MM" em horas decimais.
+   * Converte duração em horas decimais.
    *
-   * @param {string} dur - Duração no formato "HH:MM".
-   * @returns {number} Horas decimais (ex: "03:00" → 3, "01:30" → 1.5).
+   * Aceita múltiplos formatos:
+   * - String "HH:MM" (ex: "03:00" → 3)
+   * - String Date serializada do Apps Script (ex: "Sun Dec 31 1899 03:00:00 GMT..." → 3)
+   * - Número fracionário de dia (ex: 0.125 → 3)
+   * - Número de horas direto (ex: 3 → 3)
+   *
+   * @param {string|number} dur - Duração em qualquer formato aceito.
+   * @returns {number} Horas decimais.
    */
   const duracaoParaHorasDecimal = (dur) => {
-    if (!dur || typeof dur !== 'string') return 0;
-    const parts = dur.split(':');
-    if (parts.length !== 2) return 0;
-    const h = parseInt(parts[0], 10) || 0;
-    const m = parseInt(parts[1], 10) || 0;
-    return h + m / 60;
+    if (dur == null) return 0;
+
+    // Número: fração de dia (< 1.5) ou horas diretas
+    if (typeof dur === 'number') {
+      return dur < 1.5 ? dur * 24 : dur;
+    }
+
+    const s = String(dur).trim();
+    if (!s) return 0;
+
+    // Formato padrão "HH:MM"
+    if (/^\d{1,3}:\d{2}$/.test(s)) {
+      const parts = s.split(':');
+      return (parseInt(parts[0], 10) || 0) + (parseInt(parts[1], 10) || 0) / 60;
+    }
+
+    // String Date do Apps Script ("Sun Dec 31 1899 03:00:00 GMT...")
+    const timeMatch = s.match(/(\d{1,2}):(\d{2}):(\d{2})/);
+    if (timeMatch) {
+      return (parseInt(timeMatch[1], 10) || 0) + (parseInt(timeMatch[2], 10) || 0) / 60;
+    }
+
+    // Fallback numérico
+    const num = parseFloat(s);
+    if (!Number.isNaN(num)) {
+      return num < 1.5 ? num * 24 : num;
+    }
+
+    return 0;
   };
 
   /**
@@ -99,11 +128,30 @@
     return div.innerHTML;
   };
 
+  /**
+   * Formata porcentagem para exibição.
+   *
+   * @param {number} parte - Valor parcial.
+   * @param {number} total - Valor total.
+   * @returns {string} Porcentagem formatada (ex: "12,5%"). Retorna "0%" se total ≤ 0.
+   */
+  const formatarPorcentagem = (parte, total) => {
+    if (!total || total <= 0) return '0%';
+    const pct = (parte / total) * 100;
+    if (pct === 0) return '0%';
+    if (Number.isInteger(pct)) return `${pct}%`;
+    return `${pct.toLocaleString('pt-BR', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    })}%`;
+  };
+
   window.Utils = {
     formatarMoeda,
     formatarVigenciaCurta,
     duracaoParaHorasDecimal,
     formatarTotalHoras,
+    formatarPorcentagem,
     extrairData,
     dataParaSort,
     escapeHtml,
