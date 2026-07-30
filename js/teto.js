@@ -856,10 +856,11 @@
 
       const detailsHtml = items.map((alt) => {
         const diaLabel = DIAS_LABEL[DIAS_KEY.indexOf(alt.dia_semana)] || alt.dia_semana;
-        const horasAnt = alt.horas_anteriores || 0;
-        const horasText = horasAnt > 0
-          ? `Antes: ${horasAnt}h → ${alt.total_horas}h`
-          : `${alt.total_horas}h`;
+        const horasAnt = Number(alt.horas_anteriores) || 0;
+        const horasNova = Number(alt.total_horas) || 0;
+        const horasText = horasAnt > 0 && horasAnt !== horasNova
+          ? `<span class="hist-horas-ant">${horasAnt}h</span> → <span class="hist-horas-nova">${horasNova}h</span>`
+          : `${horasNova}h`;
         return `
           <div class="hist-detail" data-di="${alt.data_inicio}" data-ds="${alt.dia_semana}">
             <span class="hist-detail-dia">${window.Utils.escapeHtml(diaLabel)}</span>
@@ -976,5 +977,8 @@
   window.Teto = {
     carregarTetoVigencia,
     renderRelacaoEditor: renderRelacaoEditorWithHistory,
+    /** @param {TetoData} data */
+    renderTetoCardHtml: renderTetoCard,
+    bindTetoToggleBtn: bindTetoToggle,
   };
 })();
