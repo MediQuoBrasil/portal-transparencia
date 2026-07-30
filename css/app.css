@@ -988,6 +988,10 @@ body {
   margin-bottom: 1rem;
 }
 
+.metrics--4col {
+  grid-template-columns: repeat(4, 1fr);
+}
+
 .metric-box {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1009,6 +1013,7 @@ body {
   color: var(--fg);
   line-height: 1.2;
   letter-spacing: -0.02em;
+  white-space: nowrap;
 }
 
 .metric-box .label {
@@ -1357,7 +1362,8 @@ body {
     padding: 2rem 1.25rem;
   }
 
-  .metrics {
+  .metrics,
+  .metrics--4col {
     grid-template-columns: repeat(2, 1fr);
   }
 
@@ -1536,28 +1542,133 @@ body {
 }
 
 
-/* ─── Professional list ─────────────────────────────────── */
+/* ─── Card header row (title + sort) ───────────────────── */
 
-.prof-list {
-  list-style: none;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 0.3rem 0.75rem;
-  padding: 0;
+.card--prof {
+  padding-bottom: 0.75rem;
 }
 
-.prof-list li {
-  font-size: 0.82rem;
-  color: var(--fg);
-  padding: 0.35rem 0;
+.card-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.6rem;
+}
+
+.card-header-row .card-title {
+  margin-bottom: 0;
+}
+
+
+/* ─── Sort group ───────────────────────────────────────── */
+
+.sort-group {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  font-family: var(--font);
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+  white-space: nowrap;
+}
+
+.sort-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--fg-muted);
+  background: var(--surface);
+}
+
+.sort-btn.active {
+  background: var(--accent-dim);
+  border-color: var(--border-accent);
+  color: var(--accent);
+}
+
+
+/* ─── Professional table ───────────────────────────────── */
+
+.prof-table-wrap {
+  overflow-x: auto;
+  margin: 0 -1.5rem;
+  padding: 0 1.5rem;
+}
+
+.prof-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+.prof-table thead {
+  position: sticky;
+  top: 0;
+}
+
+.prof-table th {
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-subtle);
+  padding: 0 0 0.4rem;
+  text-align: left;
   border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.prof-th-name {
+  padding-left: 1rem;
+}
+
+.prof-th-crm {
+  padding-left: 1.25rem;
+}
+
+.prof-th-metric {
+  text-align: right !important;
+  padding-right: 0.25rem;
+}
+
+.prof-row {
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.prof-row:hover {
+  background: var(--surface);
+}
+
+.prof-row td {
+  padding: 0.4rem 0;
+  font-size: 0.8rem;
+  color: var(--fg);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.prof-cell-name {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  font-weight: 500;
+  padding-right: 1rem;
 }
 
-.prof-list li::before {
-  content: '';
+.prof-dot {
   width: 5px;
   height: 5px;
   background: var(--accent);
@@ -1565,9 +1676,29 @@ body {
   flex-shrink: 0;
 }
 
-.prof-crm {
+.prof-cell-crm {
   color: var(--fg-subtle);
-  font-size: 0.76rem;
+  font-size: 0.74rem;
+  padding-left: 1.25rem;
+  padding-right: 1rem;
+}
+
+.prof-cell-metric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.78rem;
+  padding-left: 0.75rem;
+  padding-right: 0.25rem;
+}
+
+.prof-cell-valor {
+  padding-right: 0;
+}
+
+.prof-pct {
+  color: var(--fg-subtle);
+  font-size: 0.68rem;
+  margin-left: 0.2rem;
 }
 
 
@@ -1692,7 +1823,32 @@ body {
     min-width: unset;
   }
 
-  .prof-list {
-    grid-template-columns: 1fr;
+  .card--prof {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .prof-table-wrap {
+    margin: 0 -0.75rem;
+    padding: 0 0.75rem;
+  }
+
+  .card-header-row {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .prof-cell-metric {
+    font-size: 0.72rem;
+  }
+
+  .prof-pct {
+    font-size: 0.62rem;
+  }
+
+  .prof-table th,
+  .prof-row td {
+    padding-left: 0.1rem;
+    padding-right: 0.1rem;
   }
 }
