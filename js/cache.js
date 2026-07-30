@@ -50,6 +50,8 @@
     listar_anos: 'IMUTAVEL',
     listar_vigencias: 'IMUTAVEL',
     detalhe_vigencia: 'ESTAVEL',
+    detalhe_completo: 'ESTAVEL',
+    batch_detalhes: 'ESTAVEL',
     teto_vigencia: 'ESTAVEL',
     obter_relacao: 'ESTAVEL',
     listar_alteracoes: 'ESTAVEL',
@@ -62,15 +64,15 @@
    * @type {Object<string, string[]>}
    */
   const INVALIDATION_MAP = {
-    upload_vigencia: ['init_dashboard', 'detalhe_vigencia', 'teto_vigencia', 'listar_vigencias'],
-    remover_vigencia: ['init_dashboard', 'detalhe_vigencia', 'teto_vigencia', 'listar_vigencias'],
-    salvar_relacao: ['init_dashboard', 'obter_relacao', 'teto_vigencia'],
-    salvar_relacao_datada: ['init_dashboard', 'obter_relacao', 'listar_alteracoes', 'teto_vigencia'],
-    remover_alteracao: ['init_dashboard', 'listar_alteracoes', 'teto_vigencia'],
-    salvar_feriados: ['init_dashboard', 'listar_feriados', 'teto_vigencia'],
-    adicionar_feriado: ['init_dashboard', 'listar_feriados', 'teto_vigencia'],
-    remover_feriado: ['init_dashboard', 'listar_feriados', 'teto_vigencia'],
-    criar_ano: ['init_dashboard', 'listar_anos', 'listar_vigencias'],
+    upload_vigencia: ['init_dashboard', 'detalhe_vigencia', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'listar_vigencias'],
+    remover_vigencia: ['init_dashboard', 'detalhe_vigencia', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'listar_vigencias'],
+    salvar_relacao: ['init_dashboard', 'obter_relacao', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia'],
+    salvar_relacao_datada: ['init_dashboard', 'obter_relacao', 'listar_alteracoes', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia'],
+    remover_alteracao: ['init_dashboard', 'listar_alteracoes', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia'],
+    salvar_feriados: ['init_dashboard', 'listar_feriados', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia'],
+    adicionar_feriado: ['init_dashboard', 'listar_feriados', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia'],
+    remover_feriado: ['init_dashboard', 'listar_feriados', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia'],
+    criar_ano: ['init_dashboard', 'listar_anos', 'listar_vigencias', 'batch_detalhes'],
   };
 
   // ─── Estado ────────────────────────────────────────────────
