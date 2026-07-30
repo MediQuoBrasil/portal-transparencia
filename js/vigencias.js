@@ -463,8 +463,8 @@
       <tr class="prof-row">
         <td class="prof-cell-name"><span class="prof-dot"></span>${nome}</td>
         <td class="prof-cell-crm">${crm}</td>
-        <td class="prof-cell-metric">${horas} <span class="prof-pct">${horasPct}</span></td>
-        <td class="prof-cell-metric prof-cell-valor">${valor} <span class="prof-pct">${valorPct}</span></td>
+        <td class="prof-cell-metric"><span class="prof-metric-val">${horas}</span><span class="prof-pct">${horasPct}</span></td>
+        <td class="prof-cell-metric prof-cell-valor"><span class="prof-metric-val">${valor}</span><span class="prof-pct">${valorPct}</span></td>
       </tr>
     `;
   };
