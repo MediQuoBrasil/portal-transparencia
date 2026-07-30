@@ -25,22 +25,11 @@
 
       <div class="login-error" id="loginError"></div>
 
-      <!-- GIS renderiza o botão automaticamente via One Tap.
-           Fallback: botão estático do Google -->
-      <div id="g_id_onload"
-           data-client_id="SEU_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
-           data-callback="__handleGoogleCredential"
-           data-auto_select="true"
-           data-use_fedcm_for_prompt="true">
-      </div>
-      <div class="g_id_signin"
-           data-type="standard"
-           data-shape="pill"
-           data-theme="outline"
-           data-text="signin_with"
-           data-size="large"
-           data-width="300">
-      </div>
+      <!-- Botão de fallback do Google (renderizado via JS pelo GIS).
+           O One Tap (mini popup no canto) é o método primário.
+           O botão aparece como alternativa caso o One Tap esteja
+           indisponível (dispensado, cookies bloqueados, etc.). -->
+      <div id="googleBtnContainer" style="display:flex;justify-content:center;"></div>
 
       <div class="login-divider">Acesso restrito a usuários autorizados</div>
     </div>
@@ -144,19 +133,6 @@
   <!-- ═══════════════════════════════════════════════════════
        SCRIPTS
        ═══════════════════════════════════════════════════════ -->
-
-  <!-- Callback global para o data-callback do GIS (atributo HTML) -->
-  <script>
-    function __handleGoogleCredential(response) {
-      if (window.Auth && window.Auth.init) {
-        // Se Auth já está carregado, o callback do IIFE cuida.
-        // Mas como fallback, chamamos diretamente:
-      }
-      // O GIS usa o callback definido no initialize(),
-      // este é apenas um bridge para o atributo data-callback.
-      // Na prática, o handleCredentialResponse do auth.js será usado.
-    }
-  </script>
 
   <script src="js/config.js"></script>
   <script src="js/api.js"></script>
