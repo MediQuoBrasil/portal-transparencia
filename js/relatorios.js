@@ -185,12 +185,12 @@
       if (colC && profAtual) {
         if (/^\d{2}\/\d{2}\/\d{4}\s\d{2}:\d{2}$/.test(colC)) {
           const valor = typeof colK === 'number' ? colK : parseInt(String(colK), 10) || 0;
-          const duracaoStr = colI || '00:00';
+          const duracaoStr = window.Utils.normalizarDuracao(colI);
           profAtual.plantoes.push({
             inicio: colC,
             fim: colD || '',
             duracaoStr,
-            duracaoHoras: window.Utils.duracaoParaHorasDecimal(duracaoStr),
+            duracaoHoras: window.Utils.duracaoParaHorasDecimal(colI),
             valor,
           });
         }
@@ -759,7 +759,7 @@
       profMap[chave].plantoes.push({
         inicio: window.Utils.normalizarDataHora(reg.inicio),
         fim: window.Utils.normalizarDataHora(reg.fim),
-        duracaoStr: reg.duracao_h,
+        duracaoStr: window.Utils.normalizarDuracao(reg.duracao_h),
         duracaoHoras,
         valor: reg.valor,
       });
