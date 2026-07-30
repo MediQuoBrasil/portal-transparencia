@@ -22,19 +22,17 @@
   })}`;
 
   /**
-   * Formata string de vigência "DD/MM/AAAA~DD/MM/AAAA" para "DD-MM a DD-MM".
+   * Formata string de vigência "DD/MM/AAAA~DD/MM/AAAA" para "DD/MM a DD/MM".
    *
    * @param {string} vigStr - String no formato "DD/MM/AAAA~DD/MM/AAAA".
-   * @returns {string} Formato curto (ex: "21-06 a 20-07").
+   * @returns {string} Formato curto (ex: "21/06 a 20/07").
    */
   const formatarVigenciaCurta = (vigStr) => {
     const partes = vigStr.split('~');
     if (partes.length !== 2) return vigStr;
     const ini = partes[0].trim();
     const fim = partes[1].trim();
-    const iniCurto = ini.substring(0, 5).replace(/\//g, '-');
-    const fimCurto = fim.substring(0, 5).replace(/\//g, '-');
-    return `${iniCurto} a ${fimCurto}`;
+    return `${ini.substring(0, 5)} a ${fim.substring(0, 5)}`;
   };
 
   /**
@@ -146,12 +144,100 @@
     })}%`;
   };
 
+  /**
+   * Distribui porcentagens usando o método do maior resto (largest remainder),
+   * garantindo que a soma seja exatamente 100% com 1 casa decimal.
+   *
+   * @param {number[]} valores - Valores parciais de cada item.
+   * @param {number}   total   - Soma de todos os valores.
+   * @returns {string[]} Porcentagens formatadas (ex: ["14,4%", "12,7%", …]).
+   */
+  const distribuirPorcentagens = (valores, total) => {
+    if (!total || total <= 0) return valores.map(() => '0%');
+
+    // Calcular porcentagens brutas com 1 casa decimal (×10 para trabalhar com inteiros)
+    const raw = valores.map((v) => (v / total) * 1000); // ×1000 = 1 casa decimal em ×10
+    const floored = raw.map((r) => Math.floor(r));
+    const remainders = raw.map((r, i) => ({ i, rem: r - floored[i] }));
+
+    // Diferença a distribuir (em unidades de 0,1%)
+    let diff = 1000 - floored.reduce((s, v) => s + v, 0);
+
+    // Distribuir ao maior resto
+    remainders.sort((a, b) => b.rem - a.rem);
+    for (let k = 0; k < diff && k < remainders.length; k += 1) {
+      floored[remainders[k].i] += 1;
+    }
+
+    // Formatar cada valor
+    return floored.map((f) => {
+      const intPart = Math.floor(f / 10);
+      const decPart = f % 10;
+      if (decPart === 0) return `${intPart}%`;
+      return `${intPart},${decPart}%`;
+    });
+  };
+
+  /**
+   * Mapeamento de meses abreviados em inglês para número (01–12).
+   * @type {Object<string, string>}
+   */
+  const MESES_EN = {
+    Jan: '01', Feb: '02', Mar: '03', Apr: '04',
+    May: '05', Jun: '06', Jul: '07', Aug: '08',
+    Sep: '09', Oct: '10', Nov: '11', Dec: '12',
+  };
+
+  /**
+   * Normaliza uma string de data/hora para o formato "DD/MM/AAAA HH:MM".
+   *
+   * Aceita:
+   * - Já no formato correto: "21/06/2026 19:00" → retorna como está.
+   * - Date.toString() do JS: "Sun Jun 21 2026 19:00:00 GMT-0300 (…)" → converte.
+   * - ISO 8601: "2026-06-21T19:00:00" → converte.
+   *
+   * @param {string|Date} val - Data em qualquer formato aceito.
+   * @returns {string} Data no formato "DD/MM/AAAA HH:MM", ou string original se não reconhecida.
+   */
+  const normalizarDataHora = (val) => {
+    if (val == null) return '';
+    if (val instanceof Date && !Number.isNaN(val.getTime())) {
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${pad(val.getDate())}/${pad(val.getMonth() + 1)}/${val.getFullYear()} `
+        + `${pad(val.getHours())}:${pad(val.getMinutes())}`;
+    }
+
+    const s = String(val).trim();
+    if (!s) return '';
+
+    // Já no formato correto "DD/MM/AAAA HH:MM"
+    if (/^\d{2}\/\d{2}\/\d{4}\s\d{2}:\d{2}$/.test(s)) return s;
+
+    // Date.toString(): "Wed Jun 24 2026 09:00:00 GMT-0300 (…)"
+    const jsMatch = s.match(/^\w{3}\s(\w{3})\s(\d{1,2})\s(\d{4})\s(\d{2}):(\d{2})/);
+    if (jsMatch) {
+      const mes = MESES_EN[jsMatch[1]] || '01';
+      const dia = jsMatch[2].padStart(2, '0');
+      return `${dia}/${mes}/${jsMatch[3]} ${jsMatch[4]}:${jsMatch[5]}`;
+    }
+
+    // ISO 8601: "2026-06-24T09:00:00…"
+    const isoMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    if (isoMatch) {
+      return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]} ${isoMatch[4]}:${isoMatch[5]}`;
+    }
+
+    return s;
+  };
+
   window.Utils = {
     formatarMoeda,
     formatarVigenciaCurta,
     duracaoParaHorasDecimal,
     formatarTotalHoras,
     formatarPorcentagem,
+    distribuirPorcentagens,
+    normalizarDataHora,
     extrairData,
     dataParaSort,
     escapeHtml,
