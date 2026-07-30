@@ -1212,13 +1212,161 @@
   // ─── Init ───────────────────────────────────────────────
 
   /**
-   * Carrega anos e inicializa a navegação.
+   * Carrega o dashboard via endpoint batch (1 round-trip em vez de 4).
+   * Fallback para fluxo sequencial se o endpoint não existir (deploy antigo).
    */
   const init = async () => {
     window.UI.showLoading('Carregando painel...');
 
-    const result = await window.Api.request('listar_anos');
+    const result = await window.Api.request('init_dashboard', {});
 
+    if (result.ok && result.data) {
+      window.UI.hideLoading();
+
+      const { anos, ano, mes, vigencias, detalhe, teto } = result.data;
+
+      // Se nenhum ano existe, criar o ano atual automaticamente
+      if (!anos || anos.length === 0) {
+        state.anos = [];
+        const anoAtual = new Date().getFullYear();
+        window.UI.showLoading(`Criando ano ${anoAtual}...`);
+
+        const criarResult = await window.Api.request('criar_ano', { ano: anoAtual });
+        window.UI.hideLoading();
+
+        if (criarResult.ok) {
+          state.anos = [anoAtual];
+        }
+        renderAnos();
+        if (state.anos.length > 0) {
+          await selecionarAno(state.anos[0]);
+        }
+        return;
+      }
+
+      state.anos = anos;
+      state.anoAtivo = ano;
+      state.vigencias = vigencias || [];
+      state.mesAtivo = mes;
+
+      renderAnos();
+      renderMeses();
+
+      // Atualizar header
+      const mesNome = window.AppConfig.MESES[mes - 1] || '';
+      const headerTitle = document.getElementById('mainHeaderTitle');
+      const headerSubtitle = document.getElementById('mainHeaderSubtitle');
+      if (headerTitle) headerTitle.textContent = `${mesNome} ${ano}`;
+      if (headerSubtitle) headerSubtitle.textContent = tooltipVigencia(ano, mes);
+
+      // Fechar sidebar no mobile
+      document.dispatchEvent(new CustomEvent('month-selected'));
+
+      // Renderizar detalhe diretamente (sem nova chamada de rede)
+      renderDetalheFromBatch(detalhe, teto, ano, mes);
+      return;
+    }
+
+    // Fallback: se init_dashboard não existe (deploy antigo)
+    window.UI.hideLoading();
+    await initFallback();
+  };
+
+  /**
+   * Renderiza o detalhe da vigência a partir dos dados batch.
+   * Evita round-trips adicionais para detalhe_vigencia e teto_vigencia.
+   *
+   * @param {Object} detalhe - Dados do detalhe.
+   * @param {Object} tetoData - Dados do teto.
+   * @param {number} ano - Ano.
+   * @param {number} mes - Mês.
+   */
+  const renderDetalheFromBatch = (detalhe, tetoData, ano, mes) => {
+    const mainBody = document.getElementById('mainBody');
+    if (!mainBody || !detalhe) return;
+
+    let vigenciaContent = '';
+
+    if (detalhe.temDados && detalhe.registros) {
+      const datas = datasVigencia(ano, mes);
+      state.dadosRelatorio = window.Relatorios.reconstruirDados(
+        { inicio: datas.inicio, fim: datas.fim },
+        detalhe.registros,
+      );
+      vigenciaContent = renderPreview(state.dadosRelatorio, detalhe);
+    } else {
+      const session = window.Auth.getSession();
+      const podeUpload = session && (session.role === 'admin' || session.role === 'gestor');
+
+      vigenciaContent = podeUpload
+        ? renderUploadZone(detalhe)
+        : renderPlaceholder(
+          'file-x',
+          'Nenhum dado importado',
+          `A vigência de ${detalhe.nome} ainda não possui dados.`,
+        );
+    }
+
+    vigenciaContent += '<div id="tetoContainer"></div>';
+
+    mainBody.innerHTML = renderSectionTabs()
+      + '<div class="section-panel active" id="panelVigencia">'
+      + vigenciaContent
+      + '</div>'
+      + '<div class="section-panel" id="panelRelacao"><div id="relacaoContainer"></div></div>'
+      + '<div class="section-panel" id="panelFeriados"><div id="feriadosContainer"></div></div>';
+
+    if (detalhe.temDados) {
+      bindPreviewEvents();
+    } else {
+      bindUploadEvents();
+    }
+
+    bindSectionTabs();
+
+    // Renderizar teto diretamente se veio no batch (sem round-trip)
+    if (tetoData) {
+      const container = document.getElementById('tetoContainer');
+      if (container) {
+        container.innerHTML = renderTetoCard(tetoData);
+        bindTetoToggle();
+      }
+    } else {
+      window.Teto.carregarTetoVigencia(ano, mes);
+    }
+  };
+
+  /**
+   * Renderiza o card de teto inline (sem chamada de rede).
+   * Delega para window.Teto internamente — referência local.
+   *
+   * @param {Object} data - Dados do teto.
+   * @returns {string} HTML.
+   */
+  const renderTetoCard = (data) => {
+    // Se Teto expõe renderTetoCard, usar. Senão, carregar via rede.
+    if (window.Teto.renderTetoCardHtml) {
+      return window.Teto.renderTetoCardHtml(data);
+    }
+    return '';
+  };
+
+  /**
+   * Vincula o toggle do teto (delega para Teto).
+   */
+  const bindTetoToggle = () => {
+    if (window.Teto.bindTetoToggleBtn) {
+      window.Teto.bindTetoToggleBtn();
+    }
+  };
+
+  /**
+   * Fallback: fluxo sequencial original (para deploy sem init_dashboard).
+   */
+  const initFallback = async () => {
+    window.UI.showLoading('Carregando painel...');
+
+    const result = await window.Api.request('listar_anos');
     window.UI.hideLoading();
 
     if (!result.ok) {
@@ -1228,15 +1376,11 @@
 
     state.anos = result.data.anos || [];
 
-    // Se nenhum ano existe, criar o ano atual automaticamente
     if (state.anos.length === 0) {
       const anoAtual = new Date().getFullYear();
       window.UI.showLoading(`Criando ano ${anoAtual}...`);
-
       const criarResult = await window.Api.request('criar_ano', { ano: anoAtual });
-
       window.UI.hideLoading();
-
       if (criarResult.ok) {
         state.anos = [anoAtual];
       }
@@ -1244,7 +1388,6 @@
 
     renderAnos();
 
-    // Selecionar o ano mais recente
     if (state.anos.length > 0) {
       await selecionarAno(state.anos[state.anos.length - 1]);
     }
