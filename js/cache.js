@@ -33,7 +33,9 @@
    * @type {Object<string, number>}
    */
   const TTL = {
-    /** Dados que quase nunca mudam: lista de anos, vigências passadas */
+    /** Vigências passadas: dados imutáveis, cache de 30 dias */
+    PERSISTENTE: 30 * 24 * 60 * 60 * 1000,
+    /** Dados que quase nunca mudam: lista de anos */
     IMUTAVEL: 24 * 60 * 60 * 1000,
     /** Dados que mudam raramente: feriados, relação, alterações */
     ESTAVEL: 2 * 60 * 60 * 1000,
@@ -361,15 +363,53 @@
   // ─── API pública ──────────────────────────────────────────
 
   /**
+   * Verifica se uma vigência (ano/mes) é passada (imutável).
+   * Vigências passadas nunca mudam — cache pode ser efetivamente permanente.
+   *
+   * @param {Object} params - Parâmetros com ano/mes.
+   * @returns {boolean} true se a vigência é passada.
+   */
+  const isVigenciaPassada = (params) => {
+    if (!params || !params.ano || !params.mes) return false;
+    const now = new Date();
+    const anoAtual = now.getFullYear();
+    const mesAtual = now.getMonth() + 1;
+    return params.ano < anoAtual
+      || (params.ano === anoAtual && params.mes < mesAtual);
+  };
+
+  /**
+   * Calcula o TTL efetivo para uma ação+params.
+   * Vigências passadas em ações de detalhe recebem TTL persistente (30d).
+   *
+   * @param {string} action - Nome da ação.
+   * @param {Object} [params={}] - Parâmetros.
+   * @returns {number} TTL em milissegundos.
+   */
+  const getEffectiveTTL = (action, params = {}) => {
+    const baseTtl = getTTL(action);
+    if (baseTtl === 0) return 0;
+
+    // Vigências passadas → TTL persistente (30d)
+    const detailActions = ['detalhe_completo', 'detalhe_vigencia', 'teto_vigencia'];
+    if (detailActions.includes(action) && isVigenciaPassada(params)) {
+      return TTL.PERSISTENTE;
+    }
+
+    return baseTtl;
+  };
+
+  /**
    * Obtém dados do cache.
    * Retorna { data, stale } onde stale=true indica cache expirado.
+   * Vigências passadas usam TTL persistente (30d) automaticamente.
    *
    * @param {string} action - Nome da ação API.
    * @param {Object} [params={}] - Parâmetros.
    * @returns {Promise<{data: *, stale: boolean}|null>}
    */
   const get = async (action, params = {}) => {
-    const ttl = getTTL(action);
+    const ttl = getEffectiveTTL(action, params);
     if (ttl === 0) return null;
 
     await initDB();
@@ -398,10 +438,12 @@
    * @param {string} action - Nome da ação API.
    * @param {Object} params - Parâmetros.
    * @param {*} data - Dados a armazenar.
+   * @param {number} [overrideTtlMs] - TTL override em ms. Se informado, substitui o TTL padrão da ação.
+   *   Usado pelo Prefetch para aplicar TTL longo (PERSISTENTE) em vigências passadas.
    * @returns {Promise<void>}
    */
-  const set = async (action, params, data) => {
-    const ttl = getTTL(action);
+  const set = async (action, params, data, overrideTtlMs) => {
+    const ttl = overrideTtlMs || getTTL(action);
     if (ttl === 0) return;
 
     await initDB();
@@ -482,5 +524,9 @@
     invalidate,
     clearAll,
     isCacheable,
+    /** Constantes de TTL expostas para o Prefetch usar override explícito */
+    TTL,
+    /** Utilitário: verifica se vigência é passada (imutável) */
+    isVigenciaPassada,
   };
 })();
