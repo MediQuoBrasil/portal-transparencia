@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════
- *  teto.js — Relação de plantões e cálculo de teto
+ *  teto.js — Relação de plantões, alterações e cálculo de teto
  * ═══════════════════════════════════════════════════════════
  *
  *  Responsabilidades:
@@ -8,6 +8,7 @@
  *  - Interface de edição da relação de plantões (admin)
  *  - Exibição do detalhamento diário do teto
  *  - Comparação teto × realizado
+ *  - CRUD de alterações datadas (mid-vigência overrides)
  */
 
 (function () {
@@ -24,6 +25,14 @@
    */
 
   /**
+   * @typedef {Object} AlteracaoRelacao
+   * @property {string} data_inicio  - Data ISO "YYYY-MM-DD"
+   * @property {string} dia_semana   - Dia da semana afetado
+   * @property {number} total_horas  - Novo total de horas
+   * @property {string} criado_em    - Timestamp de criação
+   */
+
+  /**
    * @typedef {Object} TetoData
    * @property {Object}   teto             - Dados do teto calculado
    * @property {number}   valor_realizado  - Valor efetivamente realizado
@@ -35,14 +44,16 @@
 
   /**
    * @typedef {Object} TetoState
-   * @property {PlantaoEntry[]} relacaoAtual - Relação de plantões atual
-   * @property {boolean}        editando     - Se está editando a relação
+   * @property {PlantaoEntry[]}      relacaoAtual  - Relação de plantões atual
+   * @property {boolean}             editando      - Se está editando a relação
+   * @property {AlteracaoRelacao[]}  alteracoes    - Alterações datadas carregadas
    */
 
   /** @type {TetoState} */
   const state = {
     relacaoAtual: [],
     editando: false,
+    alteracoes: [],
   };
 
   // ─── Constantes ────────────────────────────────────────────
@@ -188,14 +199,20 @@
 
     const rowsHtml = dias.map((d) => {
       const fmtData = d.data.split('-').reverse().join('/');
-      const feriClass = d.eh_feriado ? ' teto-row--feriado' : '';
+      let rowClass = 'teto-detail-row';
+      if (d.eh_feriado) rowClass += ' teto-row--feriado';
+      if (d.eh_alterado) rowClass += ' teto-row--alterado';
+
       return `
-        <tr class="teto-detail-row${feriClass}">
+        <tr class="${rowClass}">
           <td>${fmtData}</td>
           <td>${d.dia_semana}</td>
           <td class="num">${d.horas}h</td>
           <td class="num">${window.Utils.formatarMoeda(d.valor_dia)}</td>
-          <td>${d.eh_feriado ? '<span class="teto-feriado-dot"></span>' : ''}</td>
+          <td>
+            ${d.eh_feriado ? '<span class="teto-feriado-dot" title="Feriado"></span>' : ''}
+            ${d.eh_alterado ? '<span class="teto-alterado-dot" title="Alteração de escala"></span>' : ''}
+          </td>
         </tr>
       `;
     }).join('');
@@ -234,27 +251,34 @@
 
   /**
    * Renderiza a interface de edição da relação de plantões.
+   * Também carrega e exibe as alterações datadas.
    *
    * @param {HTMLElement} container - Container alvo.
    */
   const renderRelacaoEditor = async (container) => {
     container.innerHTML = '<div class="teto-loading"><span class="spinner"></span> Carregando relação de plantões...</div>';
 
-    const result = await window.Api.request('obter_relacao');
+    // Carregar relação e alterações em paralelo
+    const [relResult, altResult] = await Promise.all([
+      window.Api.request('obter_relacao'),
+      window.Api.request('listar_alteracoes'),
+    ]);
 
-    if (!result.ok) {
+    if (!relResult.ok) {
       container.innerHTML = `
         <div class="card">
-          <div class="teto-error">${window.Utils.escapeHtml(result.error || 'Erro ao carregar relação.')}</div>
+          <div class="teto-error">${window.Utils.escapeHtml(relResult.error || 'Erro ao carregar relação.')}</div>
         </div>
       `;
       return;
     }
 
-    state.relacaoAtual = result.data.relacao || [];
+    state.relacaoAtual = relResult.data.relacao || [];
+    state.alteracoes = (altResult.ok && altResult.data.alteracoes) || [];
 
-    container.innerHTML = renderRelacaoView();
+    container.innerHTML = renderRelacaoView() + renderAlteracoesSection();
     bindRelacaoEvents();
+    bindAlteracaoEvents(container);
   };
 
   /**
@@ -387,8 +411,9 @@
         state.editando = true;
         const container = document.getElementById('relacaoContainer');
         if (container) {
-          container.innerHTML = renderRelacaoView();
+          container.innerHTML = renderRelacaoView() + renderAlteracoesSection();
           bindRelacaoEvents();
+          bindAlteracaoEvents(container);
         }
       });
     }
@@ -439,8 +464,9 @@
 
     const container = document.getElementById('relacaoContainer');
     if (container) {
-      container.innerHTML = renderRelacaoView();
+      container.innerHTML = renderRelacaoView() + renderAlteracoesSection();
       bindRelacaoEvents();
+      bindAlteracaoEvents(container);
     }
   };
 
@@ -469,13 +495,15 @@
 
     const container = document.getElementById('relacaoContainer');
     if (container) {
-      container.innerHTML = renderRelacaoView();
+      container.innerHTML = renderRelacaoView() + renderAlteracoesSection();
       bindRelacaoEvents();
+      bindAlteracaoEvents(container);
     }
   };
 
   /**
    * Coleta os dados editados e salva no backend.
+   * Após salvar, recarrega a relação e atualiza o teto.
    */
   const salvarRelacao = async () => {
     // Coletar valores dos inputs
@@ -539,6 +567,212 @@
     if (container) {
       await renderRelacaoEditor(container);
     }
+
+    // Atualizar teto após salvar relação
+    window.Vigencias.refreshTetoVigencia();
+  };
+
+  // ─── Alterações datadas ───────────────────────────────────
+
+  /**
+   * Renderiza a seção de alterações datadas de escala.
+   *
+   * @returns {string} HTML.
+   */
+  const renderAlteracoesSection = () => {
+    const session = window.Auth.getSession();
+    const isAdmin = session?.role === 'admin';
+
+    const listHtml = state.alteracoes.length > 0
+      ? state.alteracoes.map((alt) => {
+        const dataFmt = alt.data_inicio.split('-').reverse().join('/');
+        const diaLabel = DIAS_LABEL[DIAS_KEY.indexOf(alt.dia_semana)] || alt.dia_semana;
+
+        return `
+          <div class="alt-list-item" data-di="${alt.data_inicio}" data-ds="${alt.dia_semana}">
+            <span class="alt-list-dot"></span>
+            <span class="alt-list-info">
+              <span class="alt-list-dia">${window.Utils.escapeHtml(diaLabel)}</span>
+              <span class="alt-list-sep">→</span>
+              <span class="alt-list-horas">${alt.total_horas}h</span>
+            </span>
+            <span class="alt-list-date">a partir de ${dataFmt}</span>
+            ${isAdmin ? `<button type="button" class="alt-remove-btn" data-di="${alt.data_inicio}" data-ds="${alt.dia_semana}" title="Remover alteração">×</button>` : ''}
+          </div>
+        `;
+      }).join('')
+      : '<div class="alt-empty">Nenhuma alteração de escala cadastrada.</div>';
+
+    return `
+      <div class="card alt-card">
+        <div class="alt-card-header">
+          <div class="alt-card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                 stroke-linejoin="round">
+              <path d="M12 20h9"/>
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>
+            </svg>
+            Alterações de Escala
+          </div>
+          <div class="alt-card-meta">
+            <span class="relacao-total-badge">${state.alteracoes.length} alteraç${state.alteracoes.length !== 1 ? 'ões' : 'ão'}</span>
+          </div>
+        </div>
+
+        <p class="alt-hint">Alterações permitem modificar a carga horária de um dia da semana a partir de uma data específica, sem alterar a relação base.</p>
+
+        <div class="alt-list">${listHtml}</div>
+
+        ${isAdmin ? `
+          <div class="alt-form" id="altForm">
+            <div class="alt-form-title">Nova alteração</div>
+            <div class="alt-form-row">
+              <div class="alt-form-field">
+                <label class="alt-form-label" for="altDataInicio">A partir de</label>
+                <input type="date" id="altDataInicio" class="alt-form-input" />
+              </div>
+              <div class="alt-form-field">
+                <label class="alt-form-label" for="altDiaSemana">Dia da semana</label>
+                <select id="altDiaSemana" class="alt-form-input">
+                  ${DIAS_KEY.map((d, i) => `<option value="${d}">${DIAS_LABEL[i]}</option>`).join('')}
+                </select>
+              </div>
+              <div class="alt-form-field">
+                <label class="alt-form-label" for="altHoras">Novo total (h)</label>
+                <input type="number" id="altHoras" class="alt-form-input alt-form-input--xs" min="0" max="168" step="1" placeholder="60" />
+              </div>
+              <div class="alt-form-field alt-form-field--action">
+                <button type="button" class="btn btn--sm btn--accent" id="altSalvar">Adicionar</button>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  };
+
+  /**
+   * Vincula eventos da seção de alterações.
+   *
+   * @param {HTMLElement} container - Container pai.
+   */
+  const bindAlteracaoEvents = (container) => {
+    const salvarBtn = document.getElementById('altSalvar');
+    if (salvarBtn) {
+      salvarBtn.addEventListener('click', () => { salvarAlteracao(container); });
+    }
+
+    container.querySelectorAll('.alt-remove-btn').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        removerAlteracao(btn.dataset.di, btn.dataset.ds, container);
+      });
+    });
+  };
+
+  /**
+   * Salva uma nova alteração datada e atualiza a UI.
+   *
+   * @param {HTMLElement} container - Container para re-render.
+   */
+  const salvarAlteracao = async (container) => {
+    const dataInput = document.getElementById('altDataInicio');
+    const diaSelect = document.getElementById('altDiaSemana');
+    const horasInput = document.getElementById('altHoras');
+
+    if (!dataInput || !diaSelect || !horasInput) return;
+
+    const dataInicio = dataInput.value;
+    const diaSemana = diaSelect.value;
+    const totalHoras = Number(horasInput.value);
+
+    if (!dataInicio) {
+      window.UI.showToast('Informe a data de início da alteração.', 'error');
+      return;
+    }
+
+    if (isNaN(totalHoras) || totalHoras < 0) {
+      window.UI.showToast('Informe o novo total de horas válido.', 'error');
+      return;
+    }
+
+    window.UI.showLoading('Salvando alteração...');
+
+    const result = await window.Api.request('salvar_alteracao', {
+      data_inicio: dataInicio,
+      dia_semana: diaSemana,
+      total_horas: totalHoras,
+    });
+
+    window.UI.hideLoading();
+
+    if (!result.ok) {
+      window.UI.showToast(result.error || 'Erro ao salvar alteração.', 'error');
+      return;
+    }
+
+    window.UI.showToast('Alteração de escala salva com sucesso!', 'success');
+
+    // Recarregar alterações e re-render
+    const altResult = await window.Api.request('listar_alteracoes');
+    state.alteracoes = (altResult.ok && altResult.data.alteracoes) || [];
+
+    // Re-render seção de alterações
+    const altCard = container.querySelector('.alt-card');
+    if (altCard) {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = renderAlteracoesSection();
+      altCard.replaceWith(tempDiv.firstElementChild);
+      bindAlteracaoEvents(container);
+    }
+
+    // Atualizar teto
+    window.Vigencias.refreshTetoVigencia();
+  };
+
+  /**
+   * Remove uma alteração datada e atualiza a UI.
+   *
+   * @param {string} dataInicio - Data ISO da alteração.
+   * @param {string} diaSemana  - Dia da semana.
+   * @param {HTMLElement} container - Container para re-render.
+   */
+  const removerAlteracao = async (dataInicio, diaSemana, container) => {
+    if (!confirm('Remover esta alteração de escala?')) return;
+
+    window.UI.showLoading('Removendo alteração...');
+
+    const result = await window.Api.request('remover_alteracao', {
+      data_inicio: dataInicio,
+      dia_semana: diaSemana,
+    });
+
+    window.UI.hideLoading();
+
+    if (!result.ok) {
+      window.UI.showToast(result.error || 'Erro ao remover alteração.', 'error');
+      return;
+    }
+
+    window.UI.showToast('Alteração removida.', 'success');
+
+    // Atualizar state local
+    state.alteracoes = state.alteracoes.filter(
+      (a) => !(a.data_inicio === dataInicio && a.dia_semana === diaSemana),
+    );
+
+    // Re-render seção de alterações
+    const altCard = container.querySelector('.alt-card');
+    if (altCard) {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = renderAlteracoesSection();
+      altCard.replaceWith(tempDiv.firstElementChild);
+      bindAlteracaoEvents(container);
+    }
+
+    // Atualizar teto
+    window.Vigencias.refreshTetoVigencia();
   };
 
   // ─── API pública ───────────────────────────────────────────
