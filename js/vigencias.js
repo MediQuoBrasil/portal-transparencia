@@ -1284,7 +1284,7 @@
       // Disparar prefetch de todas as vigências do ano em background
       // Após render, carrega dados restantes para acesso instantâneo
       if (window.Prefetch) {
-        window.Prefetch.startBackground(anoAlvo, anos);
+        window.Prefetch.startBackground(ano, anos);
       }
       return;
     }
