@@ -449,16 +449,15 @@
    * Gera o HTML de uma linha de profissional na tabela.
    *
    * @param {Profissional} p - Profissional.
-   * @param {Object} totais - totalGeral { horas, valor }.
+   * @param {string} horasPct - Porcentagem de horas já formatada.
+   * @param {string} valorPct - Porcentagem de valor já formatada.
    * @returns {string} HTML da linha (tr).
    */
-  const renderProfRow = (p, totais) => {
+  const renderProfRow = (p, horasPct, valorPct) => {
     const nome = window.Utils.escapeHtml(p.nome);
     const crm = window.Utils.escapeHtml(p.crm);
     const horas = window.Utils.formatarTotalHoras(p.totalHoras);
-    const horasPct = window.Utils.formatarPorcentagem(p.totalHoras, totais.horas);
     const valor = window.Utils.formatarMoeda(p.totalValor);
-    const valorPct = window.Utils.formatarPorcentagem(p.totalValor, totais.valor);
 
     return `
       <tr class="prof-row">
@@ -487,7 +486,18 @@
       sorted.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
     }
 
-    tbody.innerHTML = sorted.map((p) => renderProfRow(p, dados.totalGeral)).join('');
+    const horasPcts = window.Utils.distribuirPorcentagens(
+      sorted.map((p) => p.totalHoras),
+      dados.totalGeral.horas,
+    );
+    const valorPcts = window.Utils.distribuirPorcentagens(
+      sorted.map((p) => p.totalValor),
+      dados.totalGeral.valor,
+    );
+
+    tbody.innerHTML = sorted
+      .map((p, i) => renderProfRow(p, horasPcts[i], valorPcts[i]))
+      .join('');
 
     // Atualizar estado visual dos botões
     document.querySelectorAll('.sort-btn').forEach((btn) => {
@@ -513,8 +523,17 @@
       sorted.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
     }
 
+    const horasPcts = window.Utils.distribuirPorcentagens(
+      sorted.map((p) => p.totalHoras),
+      dados.totalGeral.horas,
+    );
+    const valorPcts = window.Utils.distribuirPorcentagens(
+      sorted.map((p) => p.totalValor),
+      dados.totalGeral.valor,
+    );
+
     const profRowsHtml = sorted
-      .map((p) => renderProfRow(p, dados.totalGeral))
+      .map((p, i) => renderProfRow(p, horasPcts[i], valorPcts[i]))
       .join('');
 
     return `
