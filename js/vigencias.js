@@ -1516,5 +1516,80 @@
     mes: state.mesAtivo,
   });
 
-  window.Vigencias = { init, refreshTetoVigencia, getVigenciaAtiva };
+  // ─── Sidebar: Navegação Análise (Fase 4) ──────────────
+
+  /**
+   * Remove seleção ativa de todos os meses na sidebar.
+   * Chamado quando o usuário navega para Previsão ou Comparação.
+   *
+   * @returns {void}
+   */
+  const limparSelecaoMes = () => {
+    document.querySelectorAll('.month-item.active').forEach((el) => {
+      el.classList.remove('active');
+    });
+    state.mesAtivo = 0;
+  };
+
+  /**
+   * Vincula os botões de Previsão e Comparação na sidebar.
+   * Chamado após o init para garantir que os elementos existem.
+   *
+   * @returns {void}
+   */
+  const bindSidebarAnalise = () => {
+    const btnPrevisao = document.getElementById('btnPrevisao');
+    const btnComparacao = document.getElementById('btnComparacao');
+    const navBtns = document.querySelectorAll('.sidebar-nav-btn');
+
+    /**
+     * Remove estado ativo de todos os botões de análise.
+     */
+    const limparBtnsAnalise = () => {
+      navBtns.forEach((b) => b.classList.remove('active'));
+    };
+
+    if (btnPrevisao) {
+      btnPrevisao.addEventListener('click', () => {
+        limparSelecaoMes();
+        limparBtnsAnalise();
+        btnPrevisao.classList.add('active');
+
+        // Fechar sidebar no mobile
+        if (window.innerWidth <= 768) {
+          const sidebar = document.getElementById('sidebar');
+          const overlay = document.getElementById('sidebarOverlay');
+          if (sidebar) sidebar.classList.remove('open');
+          if (overlay) overlay.classList.remove('open');
+        }
+
+        window.Previsao.render(state.anos);
+      });
+    }
+
+    if (btnComparacao) {
+      btnComparacao.addEventListener('click', () => {
+        limparSelecaoMes();
+        limparBtnsAnalise();
+        btnComparacao.classList.add('active');
+
+        // Fechar sidebar no mobile
+        if (window.innerWidth <= 768) {
+          const sidebar = document.getElementById('sidebar');
+          const overlay = document.getElementById('sidebarOverlay');
+          if (sidebar) sidebar.classList.remove('open');
+          if (overlay) overlay.classList.remove('open');
+        }
+
+        window.Comparacao.render(state.anos, state.anoAtivo, state.mesAtivo || new Date().getMonth() + 1);
+      });
+    }
+  };
+
+  // Observar: ao selecionar um mês (vigência), limpar estados de análise
+  const _originalSelecionarMes = typeof selecionarMes === 'function'
+    ? selecionarMes
+    : null;
+
+  window.Vigencias = { init, refreshTetoVigencia, getVigenciaAtiva, bindSidebarAnalise };
 })();
