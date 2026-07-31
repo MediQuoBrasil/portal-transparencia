@@ -134,10 +134,12 @@
     }
 
     // Armazenar relação de plantões
+    // Formato deve espelhar handleObterRelacao: { relacao: [...], agrupado: {...} }
+    // O consumidor (renderRelacaoEditor) lê relResult.data.relacao
     if (relacao) {
       await cache.set('obter_relacao', {}, {
         ok: true,
-        data: relacao,
+        data: { relacao: relacao.flat, agrupado: relacao.agrupado },
       });
     }
 
