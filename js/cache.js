@@ -58,6 +58,8 @@
     obter_relacao: 'ESTAVEL',
     listar_alteracoes: 'ESTAVEL',
     listar_feriados: 'ESTAVEL',
+    previsao_anual: 'ESTAVEL',
+    comparar_vigencias: 'VOLATIL',
   };
 
   /**
@@ -68,12 +70,12 @@
   const INVALIDATION_MAP = {
     upload_vigencia: ['init_dashboard', 'detalhe_vigencia', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'listar_vigencias'],
     remover_vigencia: ['init_dashboard', 'detalhe_vigencia', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'listar_vigencias'],
-    salvar_relacao: ['init_dashboard', 'obter_relacao', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia'],
-    salvar_relacao_datada: ['init_dashboard', 'obter_relacao', 'listar_alteracoes', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia'],
-    remover_alteracao: ['init_dashboard', 'listar_alteracoes', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia'],
-    salvar_feriados: ['init_dashboard', 'listar_feriados', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia'],
-    adicionar_feriado: ['init_dashboard', 'listar_feriados', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia'],
-    remover_feriado: ['init_dashboard', 'listar_feriados', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia'],
+    salvar_relacao: ['init_dashboard', 'obter_relacao', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual'],
+    salvar_relacao_datada: ['init_dashboard', 'obter_relacao', 'listar_alteracoes', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual'],
+    remover_alteracao: ['init_dashboard', 'listar_alteracoes', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual'],
+    salvar_feriados: ['init_dashboard', 'listar_feriados', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual'],
+    adicionar_feriado: ['init_dashboard', 'listar_feriados', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual'],
+    remover_feriado: ['init_dashboard', 'listar_feriados', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual'],
     criar_ano: ['init_dashboard', 'listar_anos', 'listar_vigencias', 'batch_detalhes'],
   };
 
