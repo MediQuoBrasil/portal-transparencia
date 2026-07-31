@@ -252,10 +252,13 @@
        ═══════════════════════════════════════════════════════ -->
 
   <script src="js/config.js"></script>
-  <!-- Prefetch carrega logo após config para disparar warmup GET
-       o mais cedo possível (antes do GIS e dos demais módulos) -->
-  <script src="js/prefetch.js"></script>
+  <!-- Cache (IndexedDB) carrega primeiro — necessário para
+       o prefetch armazenar dados pré-login persistentemente -->
   <script src="js/cache.js"></script>
+  <!-- Prefetch dispara fetch público IMEDIATAMENTE ao carregar:
+       busca dados da vigência atual ANTES do login Google.
+       Resultado armazenado no IndexedDB pelo cache.js acima. -->
+  <script src="js/prefetch.js"></script>
   <script src="js/api.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/utils.js"></script>
