@@ -49,6 +49,11 @@
 
     // Carregar vigências
     window.Vigencias.init();
+
+    // Vincular navegação de análise (Fase 4)
+    if (window.Vigencias.bindSidebarAnalise) {
+      window.Vigencias.bindSidebarAnalise();
+    }
   };
 
   /**
