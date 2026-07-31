@@ -1228,18 +1228,39 @@
   // ─── Init ───────────────────────────────────────────────
 
   /**
-   * Carrega o dashboard via endpoint batch (1 round-trip em vez de 4).
-   * Fallback para fluxo sequencial se o endpoint não existir (deploy antigo).
+   * Carrega o dashboard usando prefetch pré-login se disponível.
+   *
+   * Fluxo:
+   * 1. Tenta dados do prefetch público (carregados antes do login)
+   * 2. Se não há prefetch, tenta cache IndexedDB (init_dashboard)
+   * 3. Se nenhum cache, chama init_dashboard na rede (fallback normal)
+   *
+   * Resultado: primeira renderização sem loading na maioria dos casos.
    */
   const init = async () => {
-    window.UI.showLoading('Carregando painel...');
+    // ── 1. Tentar prefetch pré-login (dados carregados antes do login) ──
+    let dashData = null;
 
-    const result = await window.Api.request('init_dashboard', {});
+    if (window.Prefetch?.getPreLoginData) {
+      dashData = await window.Prefetch.getPreLoginData();
+    }
 
-    if (result.ok && result.data) {
+    // ── 2. Se prefetch não tem dados, chamar init_dashboard (rede/cache) ──
+    if (!dashData) {
+      window.UI.showLoading('Carregando painel...');
+
+      const result = await window.Api.request('init_dashboard', {});
+
+      if (result.ok && result.data) {
+        dashData = result.data;
+      }
+
       window.UI.hideLoading();
+    }
 
-      const { anos, ano, mes, vigencias, detalhe, teto } = result.data;
+    // ── 3. Se temos dados (de qualquer fonte), renderizar ──
+    if (dashData) {
+      const { anos, ano, mes, vigencias, detalhe, teto } = dashData;
 
       // Se nenhum ano existe, criar o ano atual automaticamente
       if (!anos || anos.length === 0) {
@@ -1281,7 +1302,7 @@
       // Renderizar detalhe diretamente (sem nova chamada de rede)
       renderDetalheFromBatch(detalhe, teto, ano, mes);
 
-      // Disparar prefetch de todas as vigências do ano em background
+      // Disparar prefetch de TODAS as vigências do ano em background
       // Após render, carrega dados restantes para acesso instantâneo
       if (window.Prefetch) {
         window.Prefetch.startBackground(ano, anos);
@@ -1289,8 +1310,7 @@
       return;
     }
 
-    // Fallback: se init_dashboard não existe (deploy antigo)
-    window.UI.hideLoading();
+    // ── 4. Fallback: se init_dashboard não existe (deploy antigo) ──
     await initFallback();
   };
 
