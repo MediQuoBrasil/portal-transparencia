@@ -690,3 +690,84 @@
     border-radius: 0;
   }
 }
+/* ─── Alterações na Relação (comparação) ──────────────────── */
+
+.comp-alt-card {
+  border-left: 3px solid var(--accent);
+}
+
+.comp-table-row--highlight td {
+  background: rgba(94, 106, 210, 0.04);
+}
+
+.comp-alt-impacto {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* ─── Justificativa em parágrafo ─────────────────────────── */
+
+.comp-just-texto-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.comp-just-texto-body {
+  padding: 0.75rem;
+}
+
+.comp-just-paragraph {
+  font-size: 0.8rem;
+  line-height: 1.6;
+  color: var(--fg);
+  margin: 0 0 0.6rem;
+}
+
+.comp-just-paragraph:last-child {
+  margin-bottom: 0;
+}
+
+.comp-section-title .comp-copy-btn {
+  margin-left: auto;
+}
+
+.btn--xs {
+  padding: 0.2rem 0.45rem;
+  font-size: 0.68rem;
+  gap: 0.25rem;
+}
+
+/* ─── Ações da comparação ────────────────────────────────── */
+
+.comp-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+/* ─── Vigência sem dados ─────────────────────────────────── */
+
+.comp-vig-sem-dados {
+  font-size: 0.68rem;
+  color: var(--fg-muted);
+  opacity: 0.7;
+  font-style: italic;
+}
+
+/* ─── Previsão: linha sem dados ──────────────────────────── */
+
+.prev-row--sem-dados td {
+  opacity: 0.45;
+}
+
+.prev-status--sem-dados {
+  background: var(--surface) !important;
+  color: var(--fg-muted) !important;
+  opacity: 0.7;
+}
