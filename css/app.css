@@ -726,6 +726,18 @@ body {
   opacity: 0.60;
 }
 
+/* Disabled months (pré-operação) */
+.month-item.disabled {
+  opacity: 0.32;
+  cursor: default;
+  pointer-events: none;
+}
+
+.month-item.disabled .month-dot {
+  background: var(--border);
+  box-shadow: none;
+}
+
 /* ─── Sidebar footer — User info ─────────────────────────── */
 
 .sidebar-footer {
