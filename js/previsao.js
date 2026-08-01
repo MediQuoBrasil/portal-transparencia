@@ -8,6 +8,7 @@
  *  - Total anual com soma dos tetos
  *  - Breakdown por dias úteis, feriados, horas
  *  - Seleção de ano via selector
+ *  - Meses sem dados de relação exibem 0h / R$ 0,00
  *
  *  Dependências:
  *  - window.Api      (request)
@@ -38,10 +39,7 @@
   // ─── Render: Tela principal ─────────────────────────────
 
   /**
-   * Renderiza a tela completa de previsão no mainBody.
-   *
-   * @param {number[]} anos - Anos disponíveis no sistema.
-   * @returns {void}
+   * @param {number[]} anos
    */
   const render = (anos) => {
     state.anosDisponiveis = anos;
@@ -49,7 +47,6 @@
     const mainBody = document.getElementById('mainBody');
     if (!mainBody) return;
 
-    // Header
     const titleEl = document.getElementById('mainHeaderTitle');
     const subtitleEl = document.getElementById('mainHeaderSubtitle');
     if (titleEl) titleEl.textContent = 'Previsão de Custos';
@@ -61,9 +58,7 @@
   };
 
   /**
-   * Renderiza o shell da página de previsão.
-   *
-   * @returns {string} HTML.
+   * @returns {string}
    */
   const renderShell = () => {
     const options = state.anosDisponiveis
@@ -97,9 +92,7 @@
           </div>
         </div>
 
-        <div class="prev-summary" id="prevSummary">
-          <!-- Renderizado após carregamento -->
-        </div>
+        <div class="prev-summary" id="prevSummary"></div>
 
         <div class="prev-table-wrap" id="prevTableWrap">
           <div class="prev-loading">
@@ -113,66 +106,77 @@
   // ─── Render: Resumo anual ──────────────────────────────
 
   /**
-   * Renderiza os cards de resumo anual.
-   *
-   * @param {Object} dados - Dados de previsão do backend.
-   * @returns {string} HTML.
+   * @param {Object} dados
+   * @returns {string}
    */
-  const renderSummary = (dados) => `
-    <div class="prev-summary-grid">
-      <div class="prev-summary-card prev-summary-card--primary">
-        <div class="prev-summary-label">Teto Anual Projetado</div>
-        <div class="prev-summary-value">${window.Utils.formatarMoeda(dados.total_anual)}</div>
+  const renderSummary = (dados) => {
+    // Contar apenas meses com dados para a média
+    const mesesComDados = dados.meses.filter((m) => m.tem_dados);
+    const qtdMeses = mesesComDados.length || 1;
+    const mediaMensal = dados.total_anual / qtdMeses;
+
+    return `
+      <div class="prev-summary-grid">
+        <div class="prev-summary-card prev-summary-card--primary">
+          <div class="prev-summary-label">Teto Anual Projetado</div>
+          <div class="prev-summary-value">${window.Utils.formatarMoeda(dados.total_anual)}</div>
+        </div>
+        <div class="prev-summary-card">
+          <div class="prev-summary-label">Total de Horas</div>
+          <div class="prev-summary-value">${dados.total_horas.toLocaleString('pt-BR')}h</div>
+        </div>
+        <div class="prev-summary-card">
+          <div class="prev-summary-label">Feriados no Ano</div>
+          <div class="prev-summary-value">${dados.total_feriados}</div>
+        </div>
+        <div class="prev-summary-card">
+          <div class="prev-summary-label">Média Mensal${qtdMeses < 12 ? ` (${qtdMeses} meses)` : ''}</div>
+          <div class="prev-summary-value">${window.Utils.formatarMoeda(mediaMensal)}</div>
+        </div>
       </div>
-      <div class="prev-summary-card">
-        <div class="prev-summary-label">Total de Horas</div>
-        <div class="prev-summary-value">${dados.total_horas.toLocaleString('pt-BR')}h</div>
-      </div>
-      <div class="prev-summary-card">
-        <div class="prev-summary-label">Feriados no Ano</div>
-        <div class="prev-summary-value">${dados.total_feriados}</div>
-      </div>
-      <div class="prev-summary-card">
-        <div class="prev-summary-label">Média Mensal</div>
-        <div class="prev-summary-value">${window.Utils.formatarMoeda(dados.total_anual / 12)}</div>
-      </div>
-    </div>
-  `;
+    `;
+  };
 
   // ─── Render: Tabela de projeção ────────────────────────
 
   /**
-   * Renderiza a tabela de projeção mensal.
-   *
-   * @param {Object} dados - Dados de previsão do backend.
-   * @returns {string} HTML.
+   * @param {Object} dados
+   * @returns {string}
    */
   const renderTable = (dados) => {
     const rows = dados.meses.map((m) => {
+      const temDados = m.tem_dados;
       const statusClass = m.status === 'ativa' ? 'prev-status--ativa' : '';
-      const statusLabel = m.status === 'ativa' ? 'Realizado' : 'Projetado';
-      const snapshotHint = m.usou_snapshot
-        ? '<span class="prev-snap-dot" title="Usando snapshot da relação"></span>'
-        : '';
+      const semDadosClass = !temDados ? 'prev-row--sem-dados' : '';
+
+      let statusLabel;
+      if (!temDados) {
+        statusLabel = 'Sem dados';
+      } else if (m.status === 'ativa') {
+        statusLabel = 'Realizado';
+      } else {
+        statusLabel = 'Projetado';
+      }
 
       return `
-        <tr class="prev-row ${statusClass}">
-          <td class="prev-cell-mes">
-            ${window.Utils.escapeHtml(m.nome)}
-            ${snapshotHint}
-          </td>
+        <tr class="prev-row ${statusClass} ${semDadosClass}">
+          <td class="prev-cell-mes">${window.Utils.escapeHtml(m.nome)}</td>
           <td class="prev-cell-periodo">${m.inicio.substring(0, 5)} — ${m.fim.substring(0, 5)}</td>
           <td class="num">${m.total_dias}</td>
           <td class="num">${m.dias_uteis}</td>
           <td class="num">${m.dias_feriado > 0 ? m.dias_feriado : '—'}</td>
-          <td class="num">${m.total_horas.toLocaleString('pt-BR')}h</td>
-          <td class="num prev-cell-valor">${window.Utils.formatarMoeda(m.teto_valor)}</td>
+          <td class="num">${temDados ? m.total_horas.toLocaleString('pt-BR') + 'h' : '—'}</td>
+          <td class="num prev-cell-valor">${temDados ? window.Utils.formatarMoeda(m.teto_valor) : '—'}</td>
           <td>
-            <span class="prev-status-badge ${statusClass}">${statusLabel}</span>
+            <span class="prev-status-badge ${statusClass} ${!temDados ? 'prev-status--sem-dados' : ''}">${statusLabel}</span>
           </td>
         </tr>
       `;
     }).join('');
+
+    // Totais apenas de meses COM dados
+    const totalDias = dados.meses.reduce((s, m) => s + m.total_dias, 0);
+    const totalUteis = dados.meses.reduce((s, m) => s + m.dias_uteis, 0);
 
     return `
       <div class="card prev-card">
@@ -195,8 +199,8 @@
           <tfoot>
             <tr class="prev-row-total">
               <td colspan="2"><strong>Total ${dados.ano}</strong></td>
-              <td class="num"><strong>${dados.meses.reduce((s, m) => s + m.total_dias, 0)}</strong></td>
-              <td class="num"><strong>${dados.meses.reduce((s, m) => s + m.dias_uteis, 0)}</strong></td>
+              <td class="num"><strong>${totalDias}</strong></td>
+              <td class="num"><strong>${totalUteis}</strong></td>
               <td class="num"><strong>${dados.total_feriados || '—'}</strong></td>
               <td class="num"><strong>${dados.total_horas.toLocaleString('pt-BR')}h</strong></td>
               <td class="num prev-cell-valor"><strong>${window.Utils.formatarMoeda(dados.total_anual)}</strong></td>
@@ -213,10 +217,8 @@
   // ─── Render: Composição anual de dias ──────────────────
 
   /**
-   * Renderiza o card de composição anual de dias da semana.
-   *
-   * @param {Object} dados - Dados de previsão.
-   * @returns {string} HTML.
+   * @param {Object} dados
+   * @returns {string}
    */
   const renderComposicaoAnual = (dados) => {
     const comp = dados.composicao_anual;
@@ -266,9 +268,7 @@
   // ─── Data fetching ─────────────────────────────────────
 
   /**
-   * Carrega a previsão do backend e renderiza.
-   *
-   * @param {number} ano - Ano a carregar.
+   * @param {number} ano
    * @returns {Promise<void>}
    */
   const carregarPrevisao = async (ano) => {
@@ -303,11 +303,6 @@
 
   // ─── Event bindings ────────────────────────────────────
 
-  /**
-   * Vincula eventos da tela de previsão.
-   *
-   * @returns {void}
-   */
   const bindEvents = () => {
     const yearSelect = document.getElementById('prevYearSelect');
     if (yearSelect) {
