@@ -6,6 +6,10 @@
  *  Integra cache via window.Cache (stale-while-revalidate):
  *  - Ações de leitura: tenta cache primeiro, rede como fallback.
  *  - Ações de escrita: rede direta + invalidação de cache.
+ *
+ *  Timeout: cada tentativa de fetch tem AbortController com
+ *  25s de timeout, evitando pendurar indefinidamente quando o
+ *  backend Apps Script está lento ou atingiu o limite de 30s.
  */
 
 (function () {
@@ -33,6 +37,14 @@
   const RETRY_DELAY = 1500;
 
   /**
+   * Timeout por tentativa de fetch (ms).
+   * Apps Script tem limite de 30s por execução; 25s dá margem
+   * para o backend completar antes do abort no client.
+   * @type {number}
+   */
+  const FETCH_TIMEOUT = 25000;
+
+  /**
    * Pausa a execução por `ms` milissegundos.
    * @param {number} ms - Duração em milissegundos.
    * @returns {Promise<void>}
@@ -56,6 +68,7 @@
 
   /**
    * Faz o fetch bruto ao backend (sem cache).
+   * Cada tentativa usa AbortController com timeout de 25s.
    *
    * @param {string} action - Nome da ação.
    * @param {Object} [payload={}] - Dados adicionais.
@@ -67,12 +80,23 @@
     let lastError = 'Erro de conexão com o servidor.';
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+      /** @type {AbortController|null} */
+      let controller = null;
+      /** @type {number|null} */
+      let timeoutId = null;
+
       try {
+        controller = new AbortController();
+        timeoutId = setTimeout(() => { controller.abort(); }, FETCH_TIMEOUT);
+
         const response = await fetch(window.AppConfig.API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify(body),
+          signal: controller.signal,
         });
+
+        clearTimeout(timeoutId);
 
         const data = await response.json();
 
@@ -83,7 +107,13 @@
 
         return data;
       } catch (err) {
-        lastError = err.message || 'Falha na comunicação.';
+        if (timeoutId) clearTimeout(timeoutId);
+
+        const isAbort = err.name === 'AbortError';
+        lastError = isAbort
+          ? 'O servidor demorou demais para responder.'
+          : (err.message || 'Falha na comunicação.');
+
         console.error(`[API] Tentativa ${attempt + 1} falhou:`, lastError);
 
         if (attempt < MAX_RETRIES) {
@@ -153,16 +183,24 @@
    */
   const login = async (idToken) => {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => { controller.abort(); }, FETCH_TIMEOUT);
+
       const response = await fetch(window.AppConfig.API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'login', token: idToken }),
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
       return await response.json();
     } catch (err) {
+      const msg = err.name === 'AbortError'
+        ? 'O servidor demorou demais. Tente novamente.'
+        : 'Falha na comunicação com o servidor.';
       console.error('[API] Erro no login:', err.message);
-      return { ok: false, error: 'Falha na comunicação com o servidor.' };
+      return { ok: false, error: msg };
     }
   };
 
