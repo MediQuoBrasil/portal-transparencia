@@ -122,7 +122,20 @@
   // ─── Sidebar: Meses ─────────────────────────────────────
 
   /**
+   * Verifica se uma vigência é anterior ao início de operação do sistema.
+   *
+   * @param {number} ano - Ano.
+   * @param {number} mes - Mês (1–12).
+   * @returns {boolean} true se pré-operação.
+   */
+  const isPreInicio = (ano, mes) => (
+    ano === window.AppConfig.ANO_INICIO_SISTEMA
+    && mes < window.AppConfig.MES_INICIO_SISTEMA
+  );
+
+  /**
    * Renderiza a lista de meses na sidebar.
+   * Meses anteriores ao início de operação ficam desabilitados (cinza, sem clique).
    */
   const renderMeses = () => {
     const list = document.getElementById('monthList');
@@ -131,9 +144,12 @@
     list.innerHTML = '';
 
     state.vigencias.forEach((v) => {
+      const disabled = isPreInicio(state.anoAtivo, v.mes);
+
       const li = document.createElement('li');
       li.className = 'month-item'
-        + (v.mes === state.mesAtivo ? ' active' : '')
+        + (disabled ? ' disabled' : '')
+        + (!disabled && v.mes === state.mesAtivo ? ' active' : '')
         + (v.status !== 'pendente' ? ' has-data' : '');
 
       const dot = document.createElement('span');
@@ -155,7 +171,9 @@
       li.appendChild(dot);
       li.appendChild(content);
 
-      li.addEventListener('click', () => { selecionarMes(v.mes); });
+      if (!disabled) {
+        li.addEventListener('click', () => { selecionarMes(v.mes); });
+      }
 
       list.appendChild(li);
     });
@@ -185,11 +203,14 @@
     state.vigencias = result.data.vigencias || [];
     renderMeses();
 
-    // Selecionar mês atual ou primeiro disponível
+    // Selecionar mês atual ou primeiro disponível (excluindo pré-operação)
     const mesAtual = new Date().getMonth() + 1;
-    const mesDefault = state.vigencias.find((v) => v.mes === mesAtual)
+    const vigenciasHabilitadas = state.vigencias.filter(
+      (v) => !isPreInicio(ano, v.mes),
+    );
+    const mesDefault = vigenciasHabilitadas.find((v) => v.mes === mesAtual)
       ? mesAtual
-      : (state.vigencias[0]?.mes || 1);
+      : (vigenciasHabilitadas[0]?.mes || 1);
 
     selecionarMes(mesDefault);
 
