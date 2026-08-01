@@ -4,27 +4,34 @@
  *                instantâneo de vigências
  * ═══════════════════════════════════════════════════════════
  *
- *  Estratégia de 4 camadas para eliminar TODA espera percebida:
+ *  Estratégia de 5 camadas para eliminar TODA espera percebida:
  *
- *  1. PREFETCH PRÉ-LOGIN (imediato, no carregamento do script):
- *     Chama endpoint público (sem auth) que retorna todos os
- *     dados do dashboard: anos, vigências, detalhe, teto,
+ *  1. PREFETCH PRÉ-LOGIN LEVE (imediato, no carregamento do script):
+ *     Chama endpoint público (sem auth) que retorna os dados do
+ *     dashboard da vigência ativa: anos, vigências, detalhe, teto,
  *     relação de plantões e feriados. Armazena em IndexedDB.
- *     Quando o login completar, dados já estão no cache →
- *     renderização instantânea sem loading.
  *
- *  2. WARMUP SIMULTÂNEO:
- *     O prefetch pré-login já aquece o Apps Script (elimina
- *     cold-start) como efeito colateral.
+ *  2. PREFETCH PRÉ-LOGIN PESADO (paralelo ao leve):
+ *     Chama `prefetch_publico_ano` (sem auth) que retorna detalhe +
+ *     teto de TODAS as 12 vigências do ano ativo. Popula o cache
+ *     `detalhe_completo` de cada mês ANTES do login → navegação
+ *     entre meses sem nenhum loading.
  *
- *  3. PREFETCH DE VIGÊNCIAS ADJACENTES (após render):
- *     Chama batch_detalhes para o ano inteiro, populando
- *     o cache de todas as 12 vigências. Navegação entre
- *     meses fica instantânea.
+ *  3. SEED PÓS-RENDER (seedDashData):
+ *     Os dados efetivamente renderizados no init (de qualquer fonte:
+ *     memória, cache persistido ou rede) são re-persistidos nas
+ *     chaves exatas lidas por loadVigencia. Garante hit de cache ao
+ *     voltar para a vigência ativa.
  *
- *  4. PREFETCH DE ANOS ADJACENTES (idle time):
- *     Após o ano ativo, prefetcha anos anteriores/seguintes
- *     com requestIdleCallback.
+ *  4. SINGLE-FLIGHT POR ANO:
+ *     Cliques em vigências cujo prefetch está em voo AGUARDAM a
+ *     promise existente em vez de disparar rede duplicada.
+ *
+ *  5. PREFETCH DE ANOS ADJACENTES (pós-render):
+ *     O ano ativo dispara imediatamente (sem idle callback); anos
+ *     adjacentes seguem por proximidade com requestIdleCallback.
+ *     Também aquece `listar_vigencias` de cada ano prefetched para
+ *     que a troca de ano não exiba loading.
  *
  *  Dependências:
  *  - js_config.js  (AppConfig.API_URL)
@@ -38,216 +45,354 @@
 
   /**
    * @typedef {Object} PrefetchState
-   * @property {boolean}     warmupFired     - Se warmup/prefetch já disparou
-   * @property {Promise|null} preLoginPromise - Promise do prefetch pré-login
-   * @property {Object|null}  preLoginData    - Dados retornados pelo prefetch público
-   * @property {boolean}      preLoginDone    - Se prefetch pré-login completou
-   * @property {Set<number>}  anosFetched     - Anos já prefetched via batch
-   * @property {boolean}      running         - Se há prefetch de anos em andamento
-   * @property {number[]}     queue           - Fila de anos para prefetch
+   * @property {boolean}      warmupFired         - Se warmup/prefetch já disparou
+   * @property {Promise|null} preLoginPromise     - Promise do prefetch leve pré-login
+   * @property {Promise|null} preLoginAnoPromise  - Promise do prefetch pesado (ano inteiro)
+   * @property {boolean}      preLoginAnoSettled  - Se o prefetch pesado já concluiu
+   * @property {Object|null}  preLoginData        - Dados retornados pelo prefetch público leve
+   * @property {boolean}      preLoginDone        - Se prefetch leve pré-login completou
+   * @property {boolean}      servedFromPersisted - Se o init renderizou a partir do cache persistido
+   * @property {Function|null} freshResolve       - Resolver da promise de dados frescos
+   * @property {Promise<Object|null>} freshPromise - Promise resolvida com dados frescos (ou null)
+   * @property {Set<number>}  anosFetched         - Anos já prefetched (batch completo em cache)
+   * @property {Map<number, Promise<boolean>>} anoPromises - Prefetch de ano em voo (single-flight)
+   * @property {boolean}      running             - Se há prefetch de anos em andamento
+   * @property {number[]}     queue               - Fila de anos para prefetch
    */
 
   /** @type {PrefetchState} */
   const state = {
     warmupFired: false,
     preLoginPromise: null,
+    preLoginAnoPromise: null,
+    preLoginAnoSettled: false,
     preLoginData: null,
     preLoginDone: false,
+    servedFromPersisted: false,
+    freshResolve: null,
+    freshPromise: null,
     anosFetched: new Set(),
+    anoPromises: new Map(),
     running: false,
     queue: [],
   };
 
-  // ─── 1. Prefetch pré-login (público, sem auth) ───────────────
+  state.freshPromise = new Promise((resolve) => { state.freshResolve = resolve; });
+
+  // ─── Helpers ─────────────────────────────────────────────────
 
   /**
-   * Dispara o prefetch público IMEDIATAMENTE ao carregar o script.
-   * Chama o endpoint `prefetch_publico` (sem token de auth).
-   * Armazena resposta em memória E no IndexedDB para persistência.
+   * POST público (sem token) ao backend.
    *
-   * Fire-and-forget: não bloqueia nada. O resultado fica
-   * disponível via `getPreLoginData()` para o Vigencias.init()
-   * consumir após login.
+   * @param {Object} body - Corpo da requisição (inclui `action`).
+   * @returns {Promise<Object>} Resposta JSON parseada.
+   * @private
+   */
+  const postPublico_ = async (body) => {
+    const response = await fetch(window.AppConfig.API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(body),
+    });
+    return response.json();
+  };
+
+  /**
+   * Persiste os detalhes de todas as vigências de um ano no cache
+   * client-side, nas mesmas chaves lidas por loadVigencia.
+   * Vigências passadas recebem TTL persistente (30d).
+   *
+   * @param {number} ano - Ano dos detalhes.
+   * @param {Object<string|number, Object>} detalhes - Mapa mês → {detalhe, teto}.
+   * @returns {Promise<void>}
+   * @private
+   */
+  const storeAnoDetalhes_ = async (ano, detalhes) => {
+    const cache = window.Cache;
+    if (!cache || !detalhes) return;
+
+    const ttlPersistente = cache.TTL?.PERSISTENTE;
+
+    const promises = Object.entries(detalhes).map(async ([mes, data]) => {
+      const mesNum = Number(mes);
+      const params = { ano, mes: mesNum };
+      const ttlOverride = cache.isVigenciaPassada(params)
+        ? ttlPersistente
+        : undefined;
+
+      // Cache como detalhe_completo (chave primária do loadVigencia)
+      await cache.set('detalhe_completo', params, {
+        ok: true,
+        data,
+      }, ttlOverride);
+
+      // Cache separado para compatibilidade
+      if (data.detalhe) {
+        await cache.set('detalhe_vigencia', params, {
+          ok: true,
+          data: data.detalhe,
+        }, ttlOverride);
+      }
+      if (data.teto) {
+        await cache.set('teto_vigencia', params, {
+          ok: true,
+          data: data.teto,
+        }, ttlOverride);
+      }
+    });
+
+    // Cache do batch inteiro (espelha resposta de batch_detalhes)
+    promises.push(cache.set('batch_detalhes', { ano }, {
+      ok: true,
+      data: { ano, detalhes },
+    }));
+
+    await Promise.all(promises);
+    state.anosFetched.add(ano);
+  };
+
+  /**
+   * Persiste os dados do dashboard (de qualquer fonte) nas chaves
+   * que o fluxo de navegação consome. Chamado pelo prefetch leve
+   * E pelo Vigencias.init() após renderizar — garante que a
+   * vigência ativa esteja sempre em cache para loadVigencia.
+   *
+   * @param {Object} data - Dados no formato do init_dashboard/prefetch_publico.
+   * @returns {Promise<void>}
+   */
+  const seedDashData = async (data) => {
+    const cache = window.Cache;
+    if (!cache || !data) return;
+
+    const { ano, mes, detalhe, teto, feriados, relacao, vigencias } = data;
+
+    /** @type {Promise<void>[]} */
+    const tasks = [];
+
+    // init_dashboard (chave padrão para o fluxo normal)
+    tasks.push(cache.set('init_dashboard', {}, { ok: true, data }));
+
+    // detalhe_completo da vigência ativa (chave lida por loadVigencia)
+    if (detalhe && teto && ano && mes) {
+      tasks.push(cache.set('detalhe_completo', { ano, mes }, {
+        ok: true,
+        data: { detalhe, teto },
+      }));
+    }
+
+    // Relação de plantões — espelha handleObterRelacao
+    if (relacao) {
+      tasks.push(cache.set('obter_relacao', {}, {
+        ok: true,
+        data: { relacao: relacao.flat, agrupado: relacao.agrupado },
+      }));
+    }
+
+    // Feriados do ano
+    if (feriados && ano) {
+      tasks.push(cache.set('listar_feriados', { ano }, {
+        ok: true,
+        data: { feriados },
+      }));
+    }
+
+    // Lista real de vigências do ano — evita loading em selecionarAno
+    if (Array.isArray(vigencias) && vigencias.length > 0 && ano) {
+      tasks.push(cache.set('listar_vigencias', { ano }, {
+        ok: true,
+        data: { vigencias },
+      }));
+    }
+
+    await Promise.all(tasks);
+  };
+
+  // ─── 1+2. Prefetch pré-login (público, sem auth) ─────────────
+
+  /**
+   * Dispara os prefetches públicos IMEDIATAMENTE ao carregar o script:
+   * - leve  (`prefetch_publico`): dashboard da vigência ativa;
+   * - pesado (`prefetch_publico_ano`): todas as 12 vigências do ano.
+   *
+   * Fire-and-forget: não bloqueia nada. Resultados ficam disponíveis
+   * via `getPreLoginData()` / cache IndexedDB para o Vigencias.init().
    */
   const earlyPreLoginFetch = () => {
     if (state.warmupFired) return;
     state.warmupFired = true;
 
     const apiUrl = window.AppConfig?.API_URL;
-    if (!apiUrl || apiUrl.includes('SEU_DEPLOY_ID')) return;
+    if (!apiUrl || apiUrl.includes('SEU_DEPLOY_ID')) {
+      state.freshResolve(null);
+      return;
+    }
 
+    // ── Leve: dashboard da vigência ativa ──
     state.preLoginPromise = (async () => {
       try {
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ action: 'prefetch_publico' }),
-        });
-
-        const result = await response.json();
+        const result = await postPublico_({ action: 'prefetch_publico' });
 
         if (!result.ok || !result.data) {
-          // Fallback: pelo menos aquecer o backend
+          state.freshResolve(null);
           return;
         }
 
         state.preLoginData = result.data;
         state.preLoginDone = true;
 
-        // Armazenar no IndexedDB para persistência entre reloads
-        await storePreLoginInCache_(result.data);
+        // Se o init já renderizou a partir do cache persistido,
+        // entregar os dados frescos para re-render silencioso.
+        state.freshResolve(state.servedFromPersisted ? result.data : null);
+
+        await seedDashData(result.data);
       } catch (_) {
         // Falha silenciosa — prefetch é best-effort.
-        // Na pior hipótese, o fluxo normal (init_dashboard) assume.
+        state.freshResolve(null);
+      }
+    })();
+
+    // ── Pesado: todas as vigências do ano ativo ──
+    state.preLoginAnoPromise = (async () => {
+      try {
+        const result = await postPublico_({ action: 'prefetch_publico_ano' });
+
+        if (!result.ok || !result.data?.detalhes) return false;
+
+        const ano = Number(result.data.ano);
+        if (!ano) return false;
+
+        await storeAnoDetalhes_(ano, result.data.detalhes);
+        return true;
+      } catch (_) {
+        return false;
+      } finally {
+        state.preLoginAnoSettled = true;
       }
     })();
   };
 
   /**
-   * Armazena os dados do prefetch pré-login no cache (IndexedDB).
-   * Popula as mesmas chaves que o fluxo normal usaria,
-   * para que `Cache.get('init_dashboard', ...)` encontre os dados.
-   *
-   * @param {Object} data - Dados retornados pelo prefetch_publico.
-   * @returns {Promise<void>}
-   * @private
-   */
-  const storePreLoginInCache_ = async (data) => {
-    const cache = window.Cache;
-    if (!cache) return;
-
-    const { ano, mes, detalhe, teto, feriados, relacao } = data;
-
-    // Armazenar como init_dashboard (chave padrão para o fluxo normal)
-    await cache.set('init_dashboard', {}, {
-      ok: true,
-      data,
-    });
-
-    // Armazenar detalhe_completo individual (para loadVigencia)
-    if (detalhe && teto) {
-      const params = { ano, mes };
-      await cache.set('detalhe_completo', params, {
-        ok: true,
-        data: { detalhe, teto },
-      });
-    }
-
-    // Armazenar relação de plantões
-    // Formato deve espelhar handleObterRelacao: { relacao: [...], agrupado: {...} }
-    // O consumidor (renderRelacaoEditor) lê relResult.data.relacao
-    if (relacao) {
-      await cache.set('obter_relacao', {}, {
-        ok: true,
-        data: { relacao: relacao.flat, agrupado: relacao.agrupado },
-      });
-    }
-
-    // Armazenar feriados
-    if (feriados && ano) {
-      await cache.set('listar_feriados', { ano }, {
-        ok: true,
-        data: { feriados },
-      });
-    }
-  };
-
-  /**
-   * Retorna os dados do prefetch pré-login, se disponíveis.
-   * Aguarda a conclusão se ainda estiver em andamento.
+   * Retorna os dados do dashboard para o primeiro render.
+   * Ordem: memória (fresco) → cache persistido (instantâneo, cobre
+   * reload com sessão ativa) → aguardar prefetch leve em voo.
    *
    * @returns {Promise<Object|null>} Dados do dashboard ou null.
    */
   const getPreLoginData = async () => {
-    // Se já completou, retornar direto (0ms)
+    // 1. Fetch leve já completou → dados frescos em memória (0ms)
     if (state.preLoginDone && state.preLoginData) {
       return state.preLoginData;
     }
 
-    // Se ainda em andamento, aguardar (milissegundos no máximo)
-    if (state.preLoginPromise) {
-      await state.preLoginPromise;
-      return state.preLoginData;
-    }
-
-    // Se não disparou (URL não configurada), tentar cache persistido
+    // 2. Cache persistido → render instantâneo sem aguardar rede.
+    //    O prefetch em voo entregará dados frescos via whenFresh().
     const cache = window.Cache;
     if (cache) {
       const cached = await cache.get('init_dashboard', {});
-      if (cached && !cached.stale) {
-        return cached.data?.data || null;
+      const data = cached?.data?.data || null;
+      if (data) {
+        state.servedFromPersisted = true;
+        return data;
       }
+    }
+
+    // 3. Sem cache → aguardar o fetch leve (primeiro acesso absoluto)
+    if (state.preLoginPromise) {
+      await state.preLoginPromise;
+      if (state.preLoginData) return state.preLoginData;
     }
 
     return null;
   };
 
+  /**
+   * Promise resolvida com dados frescos do dashboard quando o
+   * prefetch leve completar APÓS um render a partir de cache
+   * persistido — ou null quando não houver nada mais fresco.
+   * Usada pelo Vigencias.init() para re-render silencioso.
+   *
+   * @returns {Promise<Object|null>}
+   */
+  const whenFresh = () => state.freshPromise;
+
   // Disparar IMEDIATAMENTE ao carregar o script
   earlyPreLoginFetch();
 
-  // ─── 2. Prefetch batch de vigências (pós-login) ──────────────
+  // ─── Single-flight: aguardar prefetch em voo ─────────────────
+
+  /**
+   * Aguarda qualquer prefetch em voo que possa cobrir o ano
+   * (público pesado pré-login ou batch autenticado), evitando
+   * disparar rede duplicada para dados que já estão chegando.
+   *
+   * @param {number} ano - Ano desejado.
+   * @returns {Promise<void>}
+   * @private
+   */
+  const waitAnoPrefetch_ = async (ano) => {
+    /** @type {Promise[]} */
+    const pending = [];
+
+    if (state.preLoginAnoPromise
+      && !state.preLoginAnoSettled
+      && !state.anosFetched.has(ano)) {
+      pending.push(state.preLoginAnoPromise);
+    }
+
+    const inflight = state.anoPromises.get(ano);
+    if (inflight) pending.push(inflight);
+
+    if (pending.length > 0) {
+      try {
+        await Promise.all(pending);
+      } catch (_) {
+        // Prefetch é best-effort — fallback de rede assume adiante.
+      }
+    }
+  };
+
+  // ─── Prefetch batch de vigências (pós-login) ─────────────────
 
   /**
    * Prefetcha todas as vigências de um ano via batch_detalhes.
-   * Requer auth (usa Api.request com token).
+   * Requer auth (usa Api.request com token). Single-flight:
+   * chamadas concorrentes para o mesmo ano compartilham a promise.
    *
    * @param {number} ano - Ano a prefetchar.
    * @returns {Promise<boolean>} true se sucesso.
    */
-  const prefetchAno = async (ano) => {
-    if (state.anosFetched.has(ano)) return true;
+  const prefetchAno = (ano) => {
+    if (state.anosFetched.has(ano)) return Promise.resolve(true);
 
-    try {
-      const result = await window.Api.request('batch_detalhes', { ano });
+    const inflight = state.anoPromises.get(ano);
+    if (inflight) return inflight;
 
-      if (!result.ok || !result.data?.detalhes) return false;
+    const promise = (async () => {
+      try {
+        const result = await window.Api.request('batch_detalhes', { ano });
 
-      const { detalhes } = result.data;
-      const cache = window.Cache;
+        if (!result.ok || !result.data?.detalhes) return false;
 
-      if (!cache) return false;
+        await storeAnoDetalhes_(ano, result.data.detalhes);
 
-      const ttlPersistente = cache.TTL?.PERSISTENTE;
+        // Aquecer listar_vigencias do ano em background:
+        // Api.request cacheia sozinho → troca de ano sem loading.
+        window.Api.request('listar_vigencias', { ano });
 
-      const promises = Object.entries(detalhes).map(async ([mes, data]) => {
-        const mesNum = Number(mes);
-        const params = { ano, mes: mesNum };
-        const ttlOverride = cache.isVigenciaPassada(params)
-          ? ttlPersistente
-          : undefined;
+        return true;
+      } catch (err) {
+        console.warn('[Prefetch] Erro no prefetch do ano', ano, err);
+        return false;
+      } finally {
+        state.anoPromises.delete(ano);
+      }
+    })();
 
-        // Cache como detalhe_completo
-        await cache.set('detalhe_completo', params, {
-          ok: true,
-          data,
-        }, ttlOverride);
-
-        // Cache separado para compatibilidade
-        if (data.detalhe) {
-          await cache.set('detalhe_vigencia', params, {
-            ok: true,
-            data: data.detalhe,
-          }, ttlOverride);
-        }
-        if (data.teto) {
-          await cache.set('teto_vigencia', params, {
-            ok: true,
-            data: data.teto,
-          }, ttlOverride);
-        }
-      });
-
-      await Promise.all(promises);
-
-      state.anosFetched.add(ano);
-      return true;
-    } catch (err) {
-      console.warn('[Prefetch] Erro no prefetch do ano', ano, err);
-      return false;
-    }
+    state.anoPromises.set(ano, promise);
+    return promise;
   };
 
-  // ─── 3. Orquestrador de background ───────────────────────────
+  // ─── Orquestrador de background ───────────────────────────
 
   /**
    * Delay entre prefetch de anos adjacentes (ms).
@@ -257,7 +402,8 @@
 
   /**
    * Inicia prefetch em background após render inicial.
-   * Prioriza: ano ativo → adjacentes por proximidade.
+   * O ano ativo dispara IMEDIATAMENTE (sem idle callback);
+   * adjacentes seguem por proximidade em idle time.
    *
    * @param {number} anoAtivo - Ano atualmente selecionado.
    * @param {number[]} anosDisponiveis - Lista de todos os anos.
@@ -280,46 +426,61 @@
     });
 
     state.queue = fila;
-    processQueue_();
+    processQueue_(true);
   };
 
   /**
-   * Processa a fila de prefetch usando requestIdleCallback.
+   * Processa a fila de prefetch. O primeiro item roda imediatamente
+   * quando `immediate` é true; os demais via requestIdleCallback.
+   *
+   * @param {boolean} [immediate=false] - Executar sem aguardar idle.
    * @private
    */
-  const processQueue_ = () => {
+  const processQueue_ = (immediate = false) => {
     if (state.queue.length === 0) {
       state.running = false;
       return;
     }
 
-    const scheduleNext = (fn) => {
-      if (typeof requestIdleCallback === 'function') {
-        requestIdleCallback(fn, { timeout: 3000 });
-      } else {
-        setTimeout(fn, 100);
-      }
-    };
-
-    scheduleNext(async () => {
+    const run = async () => {
       const ano = state.queue.shift();
-      if (ano && !state.anosFetched.has(ano)) {
-        await prefetchAno(ano);
+
+      if (typeof ano === 'number') {
+        // Se o prefetch público pesado ainda pode cobrir este ano,
+        // aguardar antes de duplicar a chamada.
+        await waitAnoPrefetch_(ano);
+
+        if (!state.anosFetched.has(ano)) {
+          await prefetchAno(ano);
+        }
       }
 
       if (state.queue.length > 0) {
-        setTimeout(processQueue_, INTER_YEAR_DELAY);
+        setTimeout(() => { processQueue_(false); }, INTER_YEAR_DELAY);
       } else {
         state.running = false;
       }
-    });
+    };
+
+    if (immediate) {
+      run();
+      return;
+    }
+
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(run, { timeout: 3000 });
+    } else {
+      setTimeout(run, 100);
+    }
   };
 
-  // ─── 4. Cache-aware vigência loading ─────────────────────────
+  // ─── Cache-aware vigência loading ─────────────────────────
 
   /**
    * Carrega dados completos (detalhe + teto) de uma vigência.
-   * Tenta cache local primeiro → fallback para API.
+   * Waterfall: cache fresco → cache stale (retorno imediato com
+   * revalidação em background via Api.request) → dados pré-login
+   * em memória → aguardar prefetch em voo → rede.
    *
    * @param {number} ano - Ano.
    * @param {number} mes - Mês.
@@ -328,10 +489,48 @@
   const loadVigencia = async (ano, mes) => {
     const cache = window.Cache;
 
-    // 1. Tentar cache do detalhe_completo
+    // 1. Cache local (fresco → retorno direto; stale → Api.request
+    //    devolve o stale imediatamente e revalida em background)
     if (cache) {
       const cached = await cache.get('detalhe_completo', { ano, mes });
+
       if (cached && !cached.stale) {
+        return {
+          ok: true,
+          data: cached.data.data || cached.data,
+          fromCache: true,
+        };
+      }
+
+      if (cached && cached.stale) {
+        const result = await window.Api.request('detalhe_completo', { ano, mes });
+        return {
+          ok: result.ok,
+          data: result.ok ? result.data : null,
+          fromCache: result.fromCache || false,
+        };
+      }
+    }
+
+    // 2. Dados pré-login em memória cobrem exatamente este mês
+    const pre = state.preLoginData;
+    if (pre && Number(pre.ano) === ano && Number(pre.mes) === mes
+      && pre.detalhe && pre.teto) {
+      seedDashData(pre); // re-persistir em background
+      return {
+        ok: true,
+        data: { detalhe: pre.detalhe, teto: pre.teto },
+        fromCache: true,
+      };
+    }
+
+    // 3. Prefetch em voo pode entregar este mês — aguardar em vez
+    //    de disparar rede duplicada (single-flight)
+    await waitAnoPrefetch_(ano);
+
+    if (cache) {
+      const cached = await cache.get('detalhe_completo', { ano, mes });
+      if (cached) {
         return {
           ok: true,
           data: cached.data.data || cached.data,
@@ -340,7 +539,7 @@
       }
     }
 
-    // 2. Chamar detalhe_completo (1 round-trip)
+    // 4. Fallback: detalhe_completo (1 round-trip)
     const result = await window.Api.request('detalhe_completo', { ano, mes });
 
     return {
@@ -358,8 +557,11 @@
   const getState = () => ({
     warmupFired: state.warmupFired,
     preLoginDone: state.preLoginDone,
+    preLoginAnoSettled: state.preLoginAnoSettled,
     hasPreLoginData: state.preLoginData !== null,
+    servedFromPersisted: state.servedFromPersisted,
     anosFetched: [...state.anosFetched],
+    anosInFlight: [...state.anoPromises.keys()],
     running: state.running,
     queueLength: state.queue.length,
   });
@@ -373,6 +575,8 @@
     prefetchAno,
     loadVigencia,
     getPreLoginData,
+    seedDashData,
+    whenFresh,
     getState,
   };
 })();
