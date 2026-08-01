@@ -146,6 +146,8 @@
   const renderTable = (dados) => {
     const rows = dados.meses.map((m) => {
       const temDados = m.tem_dados;
+      // 2026: processo iniciou em Jul — meses anteriores exibem zero explícito
+      const zerarMes = dados.ano === 2026 && m.mes <= 6 && !temDados;
       const statusClass = m.status === 'ativa' ? 'prev-status--ativa' : '';
       const semDadosClass = !temDados ? 'prev-row--sem-dados' : '';
 
@@ -158,6 +160,13 @@
         statusLabel = 'Projetado';
       }
 
+      const horasDisplay = temDados
+        ? m.total_horas.toLocaleString('pt-BR') + 'h'
+        : zerarMes ? '0h' : '—';
+      const tetoDisplay = temDados
+        ? window.Utils.formatarMoeda(m.teto_valor)
+        : zerarMes ? window.Utils.formatarMoeda(0) : '—';
+
       return `
         <tr class="prev-row ${statusClass} ${semDadosClass}">
           <td class="prev-cell-mes">${window.Utils.escapeHtml(m.nome)}</td>
@@ -165,8 +174,8 @@
           <td class="num">${m.total_dias}</td>
           <td class="num">${m.dias_uteis}</td>
           <td class="num">${m.dias_feriado > 0 ? m.dias_feriado : '—'}</td>
-          <td class="num">${temDados ? m.total_horas.toLocaleString('pt-BR') + 'h' : '—'}</td>
-          <td class="num prev-cell-valor">${temDados ? window.Utils.formatarMoeda(m.teto_valor) : '—'}</td>
+          <td class="num">${horasDisplay}</td>
+          <td class="num prev-cell-valor">${tetoDisplay}</td>
           <td>
             <span class="prev-status-badge ${statusClass} ${!temDados ? 'prev-status--sem-dados' : ''}">${statusLabel}</span>
           </td>
