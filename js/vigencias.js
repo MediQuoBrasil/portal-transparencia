@@ -431,6 +431,12 @@
           return;
         }
 
+        // Invalidar estado em memória do Prefetch (preLoginData, anosFetched)
+        // para forçar re-fetch dos dados frescos após upload
+        if (window.Prefetch?.invalidateForUpload) {
+          window.Prefetch.invalidateForUpload(state.anoAtivo);
+        }
+
         // Atualizar status na sidebar
         const vigIdx = state.vigencias.findIndex((v) => v.mes === state.mesAtivo);
         if (vigIdx !== -1) {
