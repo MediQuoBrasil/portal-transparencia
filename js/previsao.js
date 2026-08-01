@@ -146,13 +146,14 @@
   const renderTable = (dados) => {
     const rows = dados.meses.map((m) => {
       const temDados = m.tem_dados;
-      // 2026: processo iniciou em Jul — meses anteriores exibem zero explícito
-      const zerarMes = dados.ano === 2026 && m.mes <= 6 && !temDados;
+      const preInicio = m.pre_inicio === true;
       const statusClass = m.status === 'ativa' ? 'prev-status--ativa' : '';
-      const semDadosClass = !temDados ? 'prev-row--sem-dados' : '';
+      const semDadosClass = (!temDados || preInicio) ? 'prev-row--sem-dados' : '';
 
       let statusLabel;
-      if (!temDados) {
+      if (preInicio) {
+        statusLabel = 'N/A';
+      } else if (!temDados) {
         statusLabel = 'Sem dados';
       } else if (m.status === 'ativa') {
         statusLabel = 'Realizado';
@@ -160,12 +161,25 @@
         statusLabel = 'Projetado';
       }
 
-      const horasDisplay = temDados
-        ? m.total_horas.toLocaleString('pt-BR') + 'h'
-        : zerarMes ? '0h' : '—';
-      const tetoDisplay = temDados
-        ? window.Utils.formatarMoeda(m.teto_valor)
-        : zerarMes ? window.Utils.formatarMoeda(0) : '—';
+      // Horas: pré-início → "0"; com dados → valor + 'h'; sem dados → "—"
+      let horasDisplay;
+      if (preInicio) {
+        horasDisplay = '0';
+      } else if (temDados) {
+        horasDisplay = m.total_horas.toLocaleString('pt-BR') + 'h';
+      } else {
+        horasDisplay = '—';
+      }
+
+      // Teto: pré-início → "R$ 0,00"; com dados → valor formatado; sem dados → "—"
+      let tetoDisplay;
+      if (preInicio) {
+        tetoDisplay = window.Utils.formatarMoeda(0);
+      } else if (temDados) {
+        tetoDisplay = window.Utils.formatarMoeda(m.teto_valor);
+      } else {
+        tetoDisplay = '—';
+      }
 
       return `
         <tr class="prev-row ${statusClass} ${semDadosClass}">
@@ -177,7 +191,7 @@
           <td class="num">${horasDisplay}</td>
           <td class="num prev-cell-valor">${tetoDisplay}</td>
           <td>
-            <span class="prev-status-badge ${statusClass} ${!temDados ? 'prev-status--sem-dados' : ''}">${statusLabel}</span>
+            <span class="prev-status-badge ${statusClass} ${(!temDados || preInicio) ? 'prev-status--sem-dados' : ''}">${statusLabel}</span>
           </td>
         </tr>
       `;
