@@ -568,6 +568,29 @@
 
   // ─── API pública ─────────────────────────────────────────────
 
+  /**
+   * Invalida estado em memória do prefetch após uma operação de
+   * escrita (upload, remoção). Limpa:
+   * - preLoginData (pode conter temDados stale)
+   * - anosFetched (forçar re-prefetch do ano)
+   * - anoPromises em voo
+   *
+   * Não toca no IndexedDB/localStorage — isso é feito por
+   * Cache.invalidate() chamado em Api.request().
+   *
+   * @param {number} [ano] - Ano afetado (limpa do anosFetched).
+   */
+  const invalidateForUpload = (ano) => {
+    state.preLoginData = null;
+    state.preLoginDone = false;
+
+    if (ano) {
+      state.anosFetched.delete(ano);
+    } else {
+      state.anosFetched.clear();
+    }
+  };
+
   window.Prefetch = {
     /** @deprecated Mantido por compatibilidade — earlyPreLoginFetch substitui */
     earlyWarmup: earlyPreLoginFetch,
@@ -578,5 +601,6 @@
     seedDashData,
     whenFresh,
     getState,
+    invalidateForUpload,
   };
 })();
