@@ -340,7 +340,7 @@
     const vigAtiva = window.Vigencias?.getVigenciaAtiva?.() || {};
     const { ano, mes } = vigAtiva;
 
-    // Carregar dados em paralelo: relação da vigência + relação atual (template) + alterações
+    // Carregar dados em paralelo: relação da vigência + relação atual + alterações
     const requests = [
       window.Api.request('obter_relacao'),
       window.Api.request('listar_alteracoes'),
@@ -361,21 +361,29 @@
       return;
     }
 
-    state.relacaoAtual = relResult.data.relacao || [];
-    state.relacaoOriginal = JSON.parse(JSON.stringify(state.relacaoAtual));
     state.alteracoes = (altResult.ok && altResult.data.alteracoes) || [];
 
-    // Determinar se a vigência tem períodos segmentados
+    // Determinar se a vigência tem dados específicos em relacao_vigencia
     const vigData = vigRelResult?.ok ? vigRelResult.data : null;
     const temMultiplosPeriodos = vigData?.tem_multiplos_periodos === true;
 
     let relacaoHtml = '';
 
     if (temMultiplosPeriodos && vigData.periodos) {
-      // Exibição segmentada: múltiplos períodos com date ranges
+      // Multi-período: usar dados da vigência para exibição segmentada
+      const ultimoPeriodo = vigData.periodos[vigData.periodos.length - 1];
+      state.relacaoAtual = ultimoPeriodo?.relacao || [];
+      state.relacaoOriginal = JSON.parse(JSON.stringify(state.relacaoAtual));
       relacaoHtml = renderRelacaoPeriodos(vigData.periodos);
+    } else if (vigData?.periodos?.length > 0) {
+      // Período único: usar dados da vigência específica (não a atual/template)
+      state.relacaoAtual = vigData.periodos[0].relacao || [];
+      state.relacaoOriginal = JSON.parse(JSON.stringify(state.relacaoAtual));
+      relacaoHtml = renderRelacaoView();
     } else {
-      // Exibição flat (período único ou sem dados de vigência)
+      // Sem dados de vigência: fallback para obter_relacao (vigência atual)
+      state.relacaoAtual = relResult.data.relacao || [];
+      state.relacaoOriginal = JSON.parse(JSON.stringify(state.relacaoAtual));
       relacaoHtml = renderRelacaoView();
     }
 
