@@ -6,10 +6,10 @@
  *  Responsabilidades:
  *  - Exibição do teto por vigência (integrado ao detalhe)
  *  - Interface de edição da relação de plantões (admin)
- *  - Exibição do detalhamento diário do teto
+ *  - Exibição da relação por vigência com períodos segmentados
  *  - Comparação teto × realizado
- *  - Fluxo de salvar com data efetiva (substitui CRUD de alterações avulsas)
- *  - Histórico de alterações por vigência
+ *  - Fluxo de salvar com data efetiva + materialização
+ *  - Histórico global de alterações (read-only timeline)
  */
 
 (function () {
@@ -35,21 +35,20 @@
    */
 
   /**
-   * @typedef {Object} TetoData
-   * @property {Object}   teto             - Dados do teto calculado
-   * @property {number}   valor_realizado  - Valor efetivamente realizado
-   * @property {number}   horas_realizadas - Horas efetivamente realizadas
-   * @property {number}   diferenca        - Diferença teto - realizado
-   * @property {number}   percentual       - % realizado sobre teto
-   * @property {boolean}  usou_snapshot    - Se usou snapshot ou relação atual
+   * @typedef {Object} PeriodoFormatado
+   * @property {string}         periodo_inicio - Data ISO "YYYY-MM-DD"
+   * @property {string}         periodo_fim    - Data ISO "YYYY-MM-DD"
+   * @property {PlantaoEntry[]} relacao        - Registros da relação
+   * @property {Object<string, PlantaoEntry[]>} agrupado - Agrupado por dia
+   * @property {number}         total_semanal  - Total de horas semanais
    */
 
   /**
    * @typedef {Object} TetoState
-   * @property {PlantaoEntry[]}      relacaoAtual    - Relação de plantões atual (do backend)
-   * @property {PlantaoEntry[]}      relacaoOriginal - Cópia da relação antes da edição (p/ detectar diffs)
-   * @property {boolean}             editando        - Se está editando a relação
-   * @property {AlteracaoRelacao[]}  alteracoes      - Alterações datadas carregadas
+   * @property {PlantaoEntry[]}      relacaoAtual    - Relação atual (template do backend)
+   * @property {PlantaoEntry[]}      relacaoOriginal - Cópia antes da edição (p/ diffs)
+   * @property {boolean}             editando        - Se está editando
+   * @property {AlteracaoRelacao[]}  alteracoes      - Histórico global
    */
 
   /** @type {TetoState} */
@@ -103,11 +102,11 @@
   /**
    * Renderiza o card de teto com métricas e detalhamento.
    *
-   * @param {TetoData} data - Dados do teto.
+   * @param {Object} data - Dados do teto.
    * @returns {string} HTML.
    */
   const renderTetoCard = (data) => {
-    const { teto, valor_realizado, diferenca, percentual, usou_snapshot } = data;
+    const { teto, valor_realizado, diferenca, percentual, usou_snapshot, fonte } = data;
     const { total_horas, total_valor, qtd_feriados, composicao, dias } = teto;
 
     const diferencaClass = diferenca >= 0 ? 'positive' : 'negative';
@@ -115,17 +114,25 @@
       ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>'
       : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
 
-    // Barra de progresso visual
     const pctClamped = Math.min(percentual, 100);
     const barColor = percentual > 100 ? 'var(--danger)' : 'var(--accent)';
 
-    // Composição de dias
     const compHtml = composicao
       ? Object.entries(composicao)
         .filter(([, v]) => v > 0)
         .map(([dia, qtd]) => `<span class="teto-comp-item">${qtd}× ${dia}</span>`)
         .join('')
       : '';
+
+    // Badge de fonte
+    let fonteBadge = '';
+    if (fonte === 'relacao_vigencia') {
+      fonteBadge = '<span class="teto-badge teto-badge--snapshot">Vigência</span>';
+    } else if (usou_snapshot) {
+      fonteBadge = '<span class="teto-badge teto-badge--snapshot">Snapshot</span>';
+    } else {
+      fonteBadge = '<span class="teto-badge teto-badge--current">Relação atual</span>';
+    }
 
     return `
       <div class="teto-card">
@@ -138,7 +145,7 @@
             </svg>
             <span class="teto-header-title">Teto da vigência</span>
           </div>
-          ${usou_snapshot ? '<span class="teto-badge teto-badge--snapshot">Snapshot</span>' : '<span class="teto-badge teto-badge--current">Relação atual</span>'}
+          ${fonteBadge}
         </div>
 
         <div class="teto-metrics">
@@ -273,7 +280,6 @@
       }
     });
 
-    // Se não existem linhas TOTAL, somar plantões individuais
     DIAS_KEY.forEach((d) => {
       if (totais[d] === 0) {
         relacao.forEach((r) => {
@@ -306,22 +312,45 @@
     }) || null;
   };
 
-  // ─── Edição da Relação de Plantões ────────────────────────
+  /**
+   * Formata data ISO "YYYY-MM-DD" para "DD/MM".
+   *
+   * @param {string} iso - Data ISO.
+   * @returns {string} "DD/MM".
+   */
+  const formatarDataCurta = (iso) => {
+    if (!iso) return '';
+    const parts = iso.split('-');
+    return `${parts[2]}/${parts[1]}`;
+  };
+
+  // ─── Relação por Vigência (segmentada) ──────────────────────
 
   /**
-   * Renderiza a interface de edição da relação de plantões.
-   * Também carrega e exibe o histórico de alterações datadas.
+   * Renderiza a relação de plantões da vigência com suporte a períodos.
+   * Se houver múltiplos períodos, mostra visão segmentada.
+   * Se período único, mostra a visão flat com grid de dias.
    *
    * @param {HTMLElement} container - Container alvo.
    */
   const renderRelacaoEditor = async (container) => {
     container.innerHTML = '<div class="teto-loading"><span class="spinner"></span> Carregando relação de plantões...</div>';
 
-    // Carregar relação e alterações em paralelo
-    const [relResult, altResult] = await Promise.all([
+    // Obter ano/mês da vigência ativa
+    const vigAtiva = window.Vigencias?.getVigenciaAtiva?.() || {};
+    const { ano, mes } = vigAtiva;
+
+    // Carregar dados em paralelo: relação da vigência + relação atual (template) + alterações
+    const requests = [
       window.Api.request('obter_relacao'),
       window.Api.request('listar_alteracoes'),
-    ]);
+    ];
+
+    if (ano && mes) {
+      requests.push(window.Api.request('obter_relacao_vigencia', { ano, mes }));
+    }
+
+    const [relResult, altResult, vigRelResult] = await Promise.all(requests);
 
     if (!relResult.ok) {
       container.innerHTML = `
@@ -336,12 +365,182 @@
     state.relacaoOriginal = JSON.parse(JSON.stringify(state.relacaoAtual));
     state.alteracoes = (altResult.ok && altResult.data.alteracoes) || [];
 
-    container.innerHTML = renderRelacaoView() + renderHistoricoAlteracoes();
+    // Determinar se a vigência tem períodos segmentados
+    const vigData = vigRelResult?.ok ? vigRelResult.data : null;
+    const temMultiplosPeriodos = vigData?.tem_multiplos_periodos === true;
+
+    let relacaoHtml = '';
+
+    if (temMultiplosPeriodos && vigData.periodos) {
+      // Exibição segmentada: múltiplos períodos com date ranges
+      relacaoHtml = renderRelacaoPeriodos(vigData.periodos);
+    } else {
+      // Exibição flat (período único ou sem dados de vigência)
+      relacaoHtml = renderRelacaoView();
+    }
+
+    container.innerHTML = relacaoHtml + renderHistoricoAlteracoes();
     bindRelacaoEvents();
   };
 
+  // ─── Renderização de períodos segmentados ──────────────────
+
   /**
-   * Renderiza a visão da relação de plantões (modo visualização/edição).
+   * Renderiza a visão de relação com múltiplos períodos.
+   * Cada período tem um header com date range e total semanal,
+   * e ao clicar expande mostrando a composição de cada dia.
+   *
+   * @param {PeriodoFormatado[]} periodos - Períodos formatados do backend.
+   * @returns {string} HTML.
+   */
+  const renderRelacaoPeriodos = (periodos) => {
+    const session = window.Auth.getSession();
+    const isAdmin = session?.role === 'admin';
+
+    // Total semanal do período mais recente (para o badge)
+    const ultimoPeriodo = periodos[periodos.length - 1];
+    const totalGeral = ultimoPeriodo ? ultimoPeriodo.total_semanal : 0;
+
+    const periodosHtml = periodos.map((p, pIdx) => {
+      const iniLabel = formatarDataCurta(p.periodo_inicio);
+      const fimLabel = formatarDataCurta(p.periodo_fim);
+
+      // Construir grid de dias para este período
+      const daysHtml = renderPeriodoDaysGrid(p.relacao || [], p.agrupado || {});
+
+      return `
+        <div class="relacao-periodo-block">
+          <div class="relacao-periodo-header" data-periodo-idx="${pIdx}">
+            <div class="relacao-periodo-range">
+              <span class="relacao-periodo-dates">${iniLabel} a ${fimLabel}</span>
+              <span class="relacao-periodo-total">${p.total_semanal || 0}h semanais</span>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                 stroke-linejoin="round" class="relacao-periodo-chevron">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </div>
+
+          <div class="relacao-periodo-summary">
+            ${renderPeriodoSummary(p.relacao || [], p.agrupado || {})}
+          </div>
+
+          <div class="relacao-periodo-detail" data-periodo-detail="${pIdx}">
+            <div class="relacao-periodo-detail-inner">
+              <div class="relacao-grid">${daysHtml}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="card relacao-card">
+        <div class="relacao-card-header">
+          <div class="relacao-card-title">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                 stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            Relação de Plantões
+          </div>
+          <div class="relacao-card-meta">
+            <span class="relacao-total-badge">${periodos.length} período${periodos.length > 1 ? 's' : ''}</span>
+            ${isAdmin ? `
+              <button type="button" class="btn btn--sm btn--ghost" id="relacaoEditar">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Editar
+              </button>
+            ` : ''}
+          </div>
+        </div>
+
+        ${periodosHtml}
+      </div>
+    `;
+  };
+
+  /**
+   * Renderiza o resumo inline de um período (tabela de dias com totais).
+   * Exibido diretamente sem precisar clicar.
+   *
+   * @param {PlantaoEntry[]} relacao - Registros do período.
+   * @param {Object<string, PlantaoEntry[]>} agrupado - Agrupado por dia.
+   * @returns {string} HTML.
+   */
+  const renderPeriodoSummary = (relacao, agrupado) => {
+    const daysHtml = DIAS_KEY.map((dia, idx) => {
+      const entries = agrupado[dia] || [];
+      const totalEntry = entries.find((e) => e.plantao.toUpperCase() === 'TOTAL');
+      const plantoes = entries.filter((e) => e.plantao.toUpperCase() !== 'TOTAL');
+      const totalHoras = totalEntry ? totalEntry.total_horas : plantoes.reduce((s, p) => s + p.total_horas, 0);
+
+      return `
+        <div class="relacao-summary-day">
+          <span class="relacao-summary-day-name">${DIAS_LABEL[idx].substring(0, 3)}</span>
+          <span class="relacao-summary-day-hours">${totalHoras}h</span>
+        </div>
+      `;
+    }).join('');
+
+    return `<div class="relacao-summary-days">${daysHtml}</div>`;
+  };
+
+  /**
+   * Renderiza o grid de dias expandido para um período.
+   *
+   * @param {PlantaoEntry[]} relacao - Registros.
+   * @param {Object<string, PlantaoEntry[]>} agrupado - Agrupado por dia.
+   * @returns {string} HTML.
+   */
+  const renderPeriodoDaysGrid = (relacao, agrupado) => {
+    return DIAS_KEY.map((dia, idx) => {
+      const entries = agrupado[dia] || [];
+      const plantoes = entries.filter((e) => e.plantao.toUpperCase() !== 'TOTAL');
+      const totalEntry = entries.find((e) => e.plantao.toUpperCase() === 'TOTAL');
+      const totalHoras = totalEntry ? totalEntry.total_horas : plantoes.reduce((s, p) => s + p.total_horas, 0);
+
+      const rowsHtml = plantoes.map((p) => `
+        <tr class="relacao-row">
+          <td>${window.Utils.escapeHtml(p.plantao)}</td>
+          <td>${window.Utils.escapeHtml(p.periodo)}</td>
+          <td class="num">${p.total_horas}h</td>
+        </tr>
+      `).join('');
+
+      return `
+        <div class="relacao-day-block">
+          <div class="relacao-day-header">
+            <span class="relacao-day-name">${DIAS_LABEL[idx]}</span>
+            <span class="relacao-day-total">${totalHoras}h</span>
+          </div>
+          <table class="relacao-table">
+            <thead>
+              <tr>
+                <th>Plantão</th>
+                <th>Período</th>
+                <th class="num">Horas</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml || '<tr><td colspan="3" class="relacao-empty">Nenhum plantão cadastrado</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }).join('');
+  };
+
+  // ─── Edição da Relação (template) — visão flat ────────────
+
+  /**
+   * Renderiza a visão flat da relação (modo visualização/edição).
+   * Usada quando há período único ou no modo de edição do template.
    *
    * @returns {string} HTML.
    */
@@ -349,7 +548,6 @@
     const session = window.Auth.getSession();
     const isAdmin = session?.role === 'admin';
 
-    // Agrupar por dia
     /** @type {Object<string, PlantaoEntry[]>} */
     const byDay = {};
     DIAS_KEY.forEach((d) => { byDay[d] = []; });
@@ -455,6 +653,8 @@
     `;
   };
 
+  // ─── Eventos ───────────────────────────────────────────────
+
   /**
    * Vincula eventos da interface de relação de plantões.
    */
@@ -465,7 +665,6 @@
 
     if (editarBtn) {
       editarBtn.addEventListener('click', () => {
-        // Guardar cópia antes de editar
         state.relacaoOriginal = JSON.parse(JSON.stringify(state.relacaoAtual));
         state.editando = true;
         const container = document.getElementById('relacaoContainer');
@@ -479,7 +678,6 @@
     if (cancelarBtn) {
       cancelarBtn.addEventListener('click', () => {
         state.editando = false;
-        // Restaurar relação original (descartar edições)
         state.relacaoAtual = JSON.parse(JSON.stringify(state.relacaoOriginal));
         const container = document.getElementById('relacaoContainer');
         if (container) {
@@ -505,6 +703,21 @@
         removerPlantao(btn.dataset.dia, parseInt(btn.dataset.idx, 10));
       });
     });
+
+    // Período expand/collapse
+    document.querySelectorAll('.relacao-periodo-header').forEach((header) => {
+      header.addEventListener('click', () => {
+        const idx = header.dataset.periodoIdx;
+        const detail = document.querySelector(`[data-periodo-detail="${idx}"]`);
+        if (!detail) return;
+
+        const isOpen = detail.classList.toggle('open');
+        header.classList.toggle('open', isOpen);
+      });
+    });
+
+    // Histórico events
+    bindHistoricoEvents(document.getElementById('relacaoContainer'));
   };
 
   /**
@@ -561,7 +774,6 @@
    * Coleta dados editados, detecta diffs e abre o modal de data.
    */
   const iniciarFluxoSalvar = () => {
-    // Coletar valores dos inputs
     /** @type {PlantaoEntry[]} */
     const novaRelacao = [];
 
@@ -585,7 +797,6 @@
       }
     });
 
-    // Adicionar linhas de TOTAL por dia
     /** @type {Object<string, number>} */
     const totaisPorDia = {};
     novaRelacao.forEach((r) => {
@@ -601,18 +812,15 @@
       });
     });
 
-    // Detectar mudanças nos totais por dia
     const totaisAntigos = extrairTotaisPorDia(state.relacaoOriginal);
     const totaisNovos = extrairTotaisPorDia(novaRelacao);
     const diffs = detectarDiffs(totaisAntigos, totaisNovos);
 
     if (diffs.length === 0) {
-      // Nenhuma mudança nos totais — salvar direto a relação sem criar alteração
       salvarRelacaoDireta(novaRelacao);
       return;
     }
 
-    // Há mudanças — abrir modal pedindo a data
     abrirModalData(novaRelacao, diffs);
   };
 
@@ -631,12 +839,7 @@
       const de = antigos[dia] || 0;
       const para = novos[dia] || 0;
       if (de !== para) {
-        diffs.push({
-          dia,
-          label: DIAS_LABEL[idx],
-          de,
-          para,
-        });
+        diffs.push({ dia, label: DIAS_LABEL[idx], de, para });
       }
     });
 
@@ -650,7 +853,6 @@
    * @param {Array<{dia: string, label: string, de: number, para: number}>} diffs - Dias alterados.
    */
   const abrirModalData = (novaRelacao, diffs) => {
-    // Remover modal anterior, se houver
     const existente = document.getElementById('modalAlteracaoData');
     if (existente) existente.remove();
 
@@ -707,11 +909,8 @@
     `;
 
     document.body.appendChild(modal);
-
-    // Forçar reflow para animar entrada
     requestAnimationFrame(() => { modal.classList.add('open'); });
 
-    // Eventos
     const cancelarBtn = modal.querySelector('#modalCancelar');
     const confirmarBtn = modal.querySelector('#modalConfirmar');
 
@@ -729,12 +928,10 @@
       salvarRelacaoComData(novaRelacao, diffs, dataInicio);
     });
 
-    // Fechar no backdrop
     modal.addEventListener('click', (e) => {
       if (e.target === modal) fecharModal(modal);
     });
 
-    // Fechar com Esc
     const onEsc = (e) => {
       if (e.key === 'Escape') {
         fecharModal(modal);
@@ -755,7 +952,7 @@
   };
 
   /**
-   * Salva a relação atualizada + cria alterações datadas para cada dia que mudou.
+   * Salva a relação atualizada + materializa para vigências afetadas.
    *
    * @param {PlantaoEntry[]} novaRelacao - Relação editada completa.
    * @param {Array<{dia: string, label: string, de: number, para: number}>} diffs - Dias alterados.
@@ -792,12 +989,11 @@
       await renderRelacaoEditor(container);
     }
 
-    // Atualizar teto após salvar relação
     window.Vigencias.refreshTetoVigencia();
   };
 
   /**
-   * Salva a relação diretamente (sem alterações de total — ex: nome/período mudou).
+   * Salva a relação diretamente (sem alterações de total).
    *
    * @param {PlantaoEntry[]} novaRelacao - Relação editada.
    */
@@ -830,7 +1026,6 @@
 
   /**
    * Renderiza o histórico de alterações datadas como timeline read-only.
-   * Mostra o registro de como a escala mudou ao longo do tempo.
    *
    * @returns {string} HTML.
    */
@@ -840,7 +1035,6 @@
     const session = window.Auth.getSession();
     const isAdmin = session?.role === 'admin';
 
-    // Agrupar por data_inicio
     /** @type {Object<string, AlteracaoRelacao[]>} */
     const byDate = {};
     state.alteracoes.forEach((alt) => {
@@ -906,11 +1100,11 @@
 
   /**
    * Vincula eventos de remoção no histórico de alterações.
-   * Chamado após renderizar o container.
    *
    * @param {HTMLElement} container - Container pai.
    */
   const bindHistoricoEvents = (container) => {
+    if (!container) return;
     container.querySelectorAll('.hist-remove-btn').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -945,39 +1139,20 @@
 
     window.UI.showToast('Alteração removida do histórico.', 'success');
 
-    // Atualizar state local
     state.alteracoes = state.alteracoes.filter(
       (a) => !(a.data_inicio === dataInicio && a.dia_semana === diaSemana),
     );
 
-    // Re-render
     await renderRelacaoEditor(container);
-
-    // Atualizar teto
     window.Vigencias.refreshTetoVigencia();
-  };
-
-  // ─── Override do renderRelacaoEditor para vincular histórico ──
-
-  // Patch: após renderizar, vincular eventos do histórico
-  const originalRenderRelacaoEditor = renderRelacaoEditor;
-
-  /**
-   * Wrapper que renderiza o editor e vincula eventos do histórico.
-   *
-   * @param {HTMLElement} container - Container alvo.
-   */
-  const renderRelacaoEditorWithHistory = async (container) => {
-    await originalRenderRelacaoEditor(container);
-    bindHistoricoEvents(container);
   };
 
   // ─── API pública ───────────────────────────────────────────
 
   window.Teto = {
     carregarTetoVigencia,
-    renderRelacaoEditor: renderRelacaoEditorWithHistory,
-    /** @param {TetoData} data */
+    renderRelacaoEditor,
+    /** @param {Object} data */
     renderTetoCardHtml: renderTetoCard,
     bindTetoToggleBtn: bindTetoToggle,
   };
