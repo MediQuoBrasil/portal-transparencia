@@ -18,10 +18,10 @@
   /** @type {AppConfig} */
   const CONFIG = {
     // Substituir pela URL real do deploy do Web App
-    API_URL: 'https://script.google.com/macros/s/AKfycbxkF-3qQWNMaxnXRL-NIKGD6Puy9WsZCXT4ptzpGysQ1kTtsBSgErEufiJoVUmj_kLA2w/exec',
+    API_URL: 'https://script.google.com/macros/s/SEU_DEPLOY_ID/exec',
 
     // Substituir pelo Client ID real do projeto GCP
-    GOOGLE_CLIENT_ID: '950451869210-qod9t7flim69ogffgcr9nn77hgtmsqvp.apps.googleusercontent.com',
+    GOOGLE_CLIENT_ID: 'SEU_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
 
     SESSION_KEY: 'mediquo_session',
 
@@ -30,6 +30,19 @@
       'Maio', 'Junho', 'Julho', 'Agosto',
       'Setembro', 'Outubro', 'Novembro', 'Dezembro',
     ],
+
+    /**
+     * Ano de início de operação do sistema.
+     * Meses anteriores a MES_INICIO_SISTEMA neste ano são pré-operação.
+     * @type {number}
+     */
+    ANO_INICIO_SISTEMA: 2026,
+
+    /**
+     * Mês de início de operação (1–12). Julho = 7.
+     * @type {number}
+     */
+    MES_INICIO_SISTEMA: 7,
   };
 
   window.AppConfig = CONFIG;
