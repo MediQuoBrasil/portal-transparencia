@@ -1262,6 +1262,14 @@
     if (dashData) {
       const { anos, ano, mes, vigencias, detalhe, teto } = dashData;
 
+      // Re-persistir os dados renderizados nas chaves lidas por
+      // loadVigencia (fire-and-forget — não atrasa o render).
+      // Garante hit de cache ao navegar de volta para a vigência ativa,
+      // independente da fonte (memória, cache persistido ou rede).
+      if (window.Prefetch && window.Prefetch.seedDashData) {
+        window.Prefetch.seedDashData(dashData);
+      }
+
       // Se nenhum ano existe, criar o ano atual automaticamente
       if (!anos || anos.length === 0) {
         state.anos = [];
@@ -1301,6 +1309,28 @@
 
       // Renderizar detalhe diretamente (sem nova chamada de rede)
       renderDetalheFromBatch(detalhe, teto, ano, mes);
+
+      // Atualização silenciosa: se o primeiro render veio do cache
+      // persistido e o prefetch público entregar dados mais novos,
+      // re-renderizar a vigência ativa sem loading.
+      if (window.Prefetch && window.Prefetch.whenFresh) {
+        window.Prefetch.whenFresh().then((fresh) => {
+          if (!fresh || !fresh.detalhe || !fresh.teto) return;
+          if (state.anoAtivo !== fresh.ano || state.mesAtivo !== fresh.mes) return;
+
+          // Não interromper o usuário fora da aba Vigência.
+          // Sem .section-tab no DOM = outra view ocupa o mainBody
+          // (Previsão/Comparação) — nunca sobrescrever.
+          const tabAtiva = document.querySelector('.section-tab.active');
+          if (!tabAtiva || tabAtiva.dataset.panel !== 'panelVigencia') return;
+
+          // Só re-renderizar se algo realmente mudou
+          if (JSON.stringify(fresh.detalhe) === JSON.stringify(detalhe)
+            && JSON.stringify(fresh.teto) === JSON.stringify(teto)) return;
+
+          renderDetalheFromBatch(fresh.detalhe, fresh.teto, fresh.ano, fresh.mes);
+        });
+      }
 
       // Disparar prefetch de TODAS as vigências do ano em background
       // Após render, carrega dados restantes para acesso instantâneo
