@@ -11,11 +11,13 @@
  *     dashboard da vigência ativa: anos, vigências, detalhe, teto,
  *     relação de plantões e feriados. Armazena em IndexedDB.
  *
- *  2. PREFETCH PRÉ-LOGIN PESADO (paralelo ao leve):
+ *  2. PREFETCH PRÉ-LOGIN PESADO (APÓS o leve completar):
  *     Chama `prefetch_publico_ano` (sem auth) que retorna detalhe +
  *     teto de TODAS as 12 vigências do ano ativo. Popula o cache
  *     `detalhe_completo` de cada mês ANTES do login → navegação
  *     entre meses sem nenhum loading.
+ *     ⚠ Dispara SOMENTE após o leve completar (ou falhar) — nunca
+ *     em paralelo. Evita sobrecarregar o backend no cold-start.
  *
  *  3. SEED PÓS-RENDER (seedDashData):
  *     Os dados efetivamente renderizados no init (de qualquer fonte:
@@ -79,6 +81,16 @@
 
   state.freshPromise = new Promise((resolve) => { state.freshResolve = resolve; });
 
+  // ─── Constantes ────────────────────────────────────────────────
+
+  /**
+   * Timeout para aguardar o prefetch leve em getPreLoginData (ms).
+   * Se o prefetch não completa em 4s, getPreLoginData retorna null
+   * e o init faz fallback para init_dashboard (autenticado).
+   * @type {number}
+   */
+  const PRE_LOGIN_TIMEOUT = 4000;
+
   // ─── Helpers ─────────────────────────────────────────────────
 
   /**
@@ -89,12 +101,22 @@
    * @private
    */
   const postPublico_ = async (body) => {
-    const response = await fetch(window.AppConfig.API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(body),
-    });
-    return response.json();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => { controller.abort(); }, 20000);
+
+    try {
+      const response = await fetch(window.AppConfig.API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      return response.json();
+    } catch (err) {
+      clearTimeout(timeoutId);
+      throw err;
+    }
   };
 
   /**
@@ -210,9 +232,11 @@
   // ─── 1+2. Prefetch pré-login (público, sem auth) ─────────────
 
   /**
-   * Dispara os prefetches públicos IMEDIATAMENTE ao carregar o script:
-   * - leve  (`prefetch_publico`): dashboard da vigência ativa;
-   * - pesado (`prefetch_publico_ano`): todas as 12 vigências do ano.
+   * Dispara os prefetches públicos ao carregar o script:
+   * - leve  (`prefetch_publico`): imediato, dashboard da vigência ativa;
+   * - pesado (`prefetch_publico_ano`): APÓS o leve completar (ou falhar),
+   *   todas as 12 vigências do ano. Nunca em paralelo — evita sobrecarregar
+   *   o backend no cold-start.
    *
    * Fire-and-forget: não bloqueia nada. Resultados ficam disponíveis
    * via `getPreLoginData()` / cache IndexedDB para o Vigencias.init().
@@ -252,7 +276,13 @@
     })();
 
     // ── Pesado: todas as vigências do ano ativo ──
+    // Dispara SOMENTE APÓS o leve completar (ou falhar).
+    // Nunca em paralelo — no cold-start, duas requests pesadas
+    // simultâneas sobrecarregam o backend Apps Script.
     state.preLoginAnoPromise = (async () => {
+      // Aguardar o leve terminar (sucesso ou falha)
+      try { await state.preLoginPromise; } catch (_) { /* ok */ }
+
       try {
         const result = await postPublico_({ action: 'prefetch_publico_ano' });
 
@@ -274,7 +304,11 @@
   /**
    * Retorna os dados do dashboard para o primeiro render.
    * Ordem: memória (fresco) → cache persistido (instantâneo, cobre
-   * reload com sessão ativa) → aguardar prefetch leve em voo.
+   * reload com sessão ativa) → aguardar prefetch leve em voo (COM TIMEOUT).
+   *
+   * Timeout: se o prefetch leve não completar em PRE_LOGIN_TIMEOUT ms,
+   * retorna null para que o init faça fallback para init_dashboard.
+   * Isso evita bloquear a UI quando o backend está frio.
    *
    * @returns {Promise<Object|null>} Dados do dashboard ou null.
    */
@@ -296,10 +330,26 @@
       }
     }
 
-    // 3. Sem cache → aguardar o fetch leve (primeiro acesso absoluto)
+    // 3. Sem cache → aguardar o fetch leve COM TIMEOUT
+    //    Se o backend está frio, não bloquear a UI para sempre.
     if (state.preLoginPromise) {
-      await state.preLoginPromise;
-      if (state.preLoginData) return state.preLoginData;
+      const timeoutPromise = new Promise((resolve) => {
+        setTimeout(() => { resolve('__TIMEOUT__'); }, PRE_LOGIN_TIMEOUT);
+      });
+
+      const result = await Promise.race([
+        state.preLoginPromise.then(() => 'done'),
+        timeoutPromise,
+      ]);
+
+      if (result !== '__TIMEOUT__' && state.preLoginData) {
+        return state.preLoginData;
+      }
+
+      // Timeout: prefetch leve demorou demais.
+      // O init fará fallback para init_dashboard (autenticado).
+      // O prefetch continuará em background e via whenFresh()
+      // entregará dados frescos quando completar.
     }
 
     return null;
