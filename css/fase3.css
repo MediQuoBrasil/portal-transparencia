@@ -483,6 +483,141 @@
 }
 
 
+/* ─── Relação: Períodos Segmentados ──────────────────────── */
+
+.relacao-periodo-block {
+  border-bottom: 1px solid var(--border);
+}
+
+.relacao-periodo-block:last-child {
+  border-bottom: none;
+}
+
+.relacao-periodo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.25rem;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+  user-select: none;
+  gap: 0.75rem;
+}
+
+.relacao-periodo-header:hover {
+  background: var(--surface);
+}
+
+.relacao-periodo-range {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.relacao-periodo-dates {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.relacao-periodo-total {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-full);
+  padding: 0.1rem 0.45rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.relacao-periodo-chevron {
+  color: var(--fg-subtle);
+  transition: transform var(--dur-fast) var(--ease-out);
+  flex-shrink: 0;
+}
+
+.relacao-periodo-header.open .relacao-periodo-chevron {
+  transform: rotate(180deg);
+}
+
+/* Summary row: compact days overview */
+
+.relacao-periodo-summary {
+  padding: 0 1.25rem 0.75rem;
+}
+
+.relacao-summary-days {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.relacao-summary-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  flex: 1;
+  min-width: 42px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.25rem;
+}
+
+.relacao-summary-day-name {
+  font-size: 0.58rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-subtle);
+}
+
+.relacao-summary-day-hours {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Detail expandable */
+
+.relacao-periodo-detail {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height var(--dur-std) var(--ease-out);
+}
+
+.relacao-periodo-detail.open {
+  max-height: 2000px;
+  transition: max-height 0.5s ease-in;
+}
+
+.relacao-periodo-detail-inner {
+  border-top: 1px solid var(--border);
+}
+
+/* hist-horas styled inline */
+
+.hist-horas-ant {
+  text-decoration: line-through;
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+
+.hist-horas-nova {
+  font-weight: 600;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+
 /* ─── Feriados Calendar ─────────────────────────────────── */
 
 .feriados-card {
@@ -1095,7 +1230,6 @@
   color: var(--danger);
 }
 
-
 /* ─── Responsive adjustments for Fase 3 ──────────────────── */
 
 @media (max-width: 900px) {
@@ -1152,5 +1286,26 @@
 
   .modal-content {
     max-width: 100%;
+  }
+
+  .relacao-periodo-header {
+    padding: 0.6rem 0.75rem;
+  }
+
+  .relacao-periodo-summary {
+    padding: 0 0.75rem 0.6rem;
+  }
+
+  .relacao-summary-day {
+    min-width: 36px;
+    padding: 0.25rem 0.15rem;
+  }
+
+  .relacao-summary-day-name {
+    font-size: 0.52rem;
+  }
+
+  .relacao-summary-day-hours {
+    font-size: 0.65rem;
   }
 }
