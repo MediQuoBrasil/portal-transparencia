@@ -149,10 +149,14 @@
     const mesRef = mesAtual || agora.getMonth() + 1;
 
     state.anoB = anoRef;
-    state.mesB = mesRef;
-    const ant = vigenciaAnterior(anoRef, mesRef);
+    state.mesB = isPreInicio(anoRef, mesRef)
+      ? primeiroMesHabilitado(anoRef)
+      : mesRef;
+    const ant = vigenciaAnterior(anoRef, state.mesB);
     state.anoA = ant.ano;
-    state.mesA = ant.mes;
+    state.mesA = isPreInicio(ant.ano, ant.mes)
+      ? primeiroMesHabilitado(ant.ano)
+      : ant.mes;
 
     const mainBody = document.getElementById('mainBody');
     if (!mainBody) return;
@@ -173,8 +177,8 @@
   const renderShell = () => {
     const optionsAnoA = renderAnoOptions(state.anoA);
     const optionsAnoB = renderAnoOptions(state.anoB);
-    const optionsMesA = renderMesOptions(state.mesA);
-    const optionsMesB = renderMesOptions(state.mesB);
+    const optionsMesA = renderMesOptions(state.mesA, state.anoA);
+    const optionsMesB = renderMesOptions(state.mesB, state.anoB);
 
     return `
       <div class="comp-page">
@@ -221,9 +225,28 @@
     .map((a) => `<option value="${a}"${a === selected ? ' selected' : ''}>${a}</option>`)
     .join('');
 
-  /** @param {number} selected */
-  const renderMesOptions = (selected) => window.AppConfig.MESES
-    .map((nome, i) => `<option value="${i + 1}"${(i + 1) === selected ? ' selected' : ''}>${nome}</option>`)
+  /**
+   * Verifica se uma vigência é anterior ao início de operação do sistema.
+   *
+   * @param {number} ano - Ano.
+   * @param {number} mes - Mês (1–12).
+   * @returns {boolean} true se pré-operação.
+   */
+  const isPreInicio = (ano, mes) => (
+    ano === window.AppConfig.ANO_INICIO_SISTEMA
+    && mes < window.AppConfig.MES_INICIO_SISTEMA
+  );
+
+  /**
+   * @param {number} selected - Mês selecionado.
+   * @param {number} ano - Ano ativo (para filtrar meses pré-operação).
+   */
+  const renderMesOptions = (selected, ano) => window.AppConfig.MESES
+    .filter((_, i) => !isPreInicio(ano, i + 1))
+    .map((nome, _, arr) => {
+      const mes = window.AppConfig.MESES.indexOf(nome) + 1;
+      return `<option value="${mes}"${mes === selected ? ' selected' : ''}>${nome}</option>`;
+    })
     .join('');
 
   // ─── Render: Resultado ────────────────────────────────
@@ -650,6 +673,43 @@
 
   // ─── Event bindings ────────────────────────────────────
 
+  /**
+   * Retorna o primeiro mês habilitado para um dado ano.
+   *
+   * @param {number} ano
+   * @returns {number} Mês (1–12).
+   */
+  const primeiroMesHabilitado = (ano) => {
+    if (ano === window.AppConfig.ANO_INICIO_SISTEMA) {
+      return window.AppConfig.MES_INICIO_SISTEMA;
+    }
+    return 1;
+  };
+
+  /**
+   * Atualiza as options de um <select> de mês ao trocar o ano.
+   * Se o mês selecionado ficar inválido (pré-operação), ajusta para o
+   * primeiro mês habilitado.
+   *
+   * @param {HTMLSelectElement} selectEl - Select de mês.
+   * @param {number} ano - Ano recém-selecionado.
+   * @param {'A'|'B'} lado - Lado da comparação.
+   */
+  const atualizarMesesPorAno = (selectEl, ano, lado) => {
+    const mesAtual = lado === 'A' ? state.mesA : state.mesB;
+    const mesAjustado = isPreInicio(ano, mesAtual)
+      ? primeiroMesHabilitado(ano)
+      : mesAtual;
+
+    selectEl.innerHTML = renderMesOptions(mesAjustado, ano);
+
+    if (lado === 'A') {
+      state.mesA = mesAjustado;
+    } else {
+      state.mesB = mesAjustado;
+    }
+  };
+
   const bindEvents = () => {
     const mesA = document.getElementById('compMesA');
     const anoA = document.getElementById('compAnoA');
@@ -658,9 +718,21 @@
     const execBtn = document.getElementById('compExecuteBtn');
 
     if (mesA) mesA.addEventListener('change', (e) => { state.mesA = Number(e.target.value); });
-    if (anoA) anoA.addEventListener('change', (e) => { state.anoA = Number(e.target.value); });
     if (mesB) mesB.addEventListener('change', (e) => { state.mesB = Number(e.target.value); });
-    if (anoB) anoB.addEventListener('change', (e) => { state.anoB = Number(e.target.value); });
+
+    if (anoA) {
+      anoA.addEventListener('change', (e) => {
+        state.anoA = Number(e.target.value);
+        if (mesA) atualizarMesesPorAno(mesA, state.anoA, 'A');
+      });
+    }
+
+    if (anoB) {
+      anoB.addEventListener('change', (e) => {
+        state.anoB = Number(e.target.value);
+        if (mesB) atualizarMesesPorAno(mesB, state.anoB, 'B');
+      });
+    }
 
     if (execBtn) {
       execBtn.addEventListener('click', () => {
