@@ -106,16 +106,32 @@
    * @returns {string} HTML.
    */
   const renderTetoCard = (data) => {
-    const { teto, valor_realizado, diferenca, percentual, usou_snapshot, fonte } = data;
+    const {
+      teto, valor_realizado, diferenca, percentual,
+      usou_snapshot, fonte,
+      valor_realizado_plantoes, valor_realizado_sos,
+      diferenca_plantoes, diferenca_sos, teto_sos, teto_geral,
+    } = data;
     const { total_horas, total_valor, qtd_feriados, composicao, dias } = teto;
 
-    const diferencaClass = diferenca >= 0 ? 'positive' : 'negative';
-    const diferencaIcon = diferenca >= 0
+    // Determinar se há dados SOS
+    const temSos = teto_sos && teto_sos.limite_horas > 0;
+
+    // Usar teto geral se disponível, senão fallback
+    const tetoGeralVal = teto_geral || total_valor;
+    const realizadoGeral = valor_realizado || 0;
+    const diferencaGeral = temSos ? (tetoGeralVal - realizadoGeral) : diferenca;
+    const percentualGeral = tetoGeralVal > 0
+      ? ((realizadoGeral / tetoGeralVal) * 100)
+      : 0;
+
+    const diferencaClass = diferencaGeral >= 0 ? 'positive' : 'negative';
+    const diferencaIcon = diferencaGeral >= 0
       ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>'
       : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
 
-    const pctClamped = Math.min(percentual, 100);
-    const barColor = percentual > 100 ? 'var(--danger)' : 'var(--accent)';
+    const pctClamped = Math.min(percentualGeral, 100);
+    const barColor = percentualGeral > 100 ? 'var(--danger)' : 'var(--accent)';
 
     const compHtml = composicao
       ? Object.entries(composicao)
@@ -134,6 +150,37 @@
       fonteBadge = '<span class="teto-badge teto-badge--current">Relação atual</span>';
     }
 
+    // Sub-linhas de plantões e SOS
+    const subLinhasHtml = temSos ? `
+      <div class="teto-sub-metrics">
+        <div class="teto-sub-row">
+          <span class="teto-sub-label">Teto plantões</span>
+          <span class="teto-sub-value">${window.Utils.formatarMoeda(total_valor)}</span>
+          <span class="teto-sub-sep">·</span>
+          <span class="teto-sub-label">Realizado</span>
+          <span class="teto-sub-value">${window.Utils.formatarMoeda(valor_realizado_plantoes || 0)}</span>
+          <span class="teto-sub-sep">·</span>
+          <span class="teto-sub-label">Dif.</span>
+          <span class="teto-sub-value ${(diferenca_plantoes || 0) >= 0 ? 'positive' : 'negative'}">${window.Utils.formatarMoeda(Math.abs(diferenca_plantoes || 0))}</span>
+        </div>
+        <div class="teto-sub-row teto-sub-row--sos">
+          <span class="teto-sub-label">Teto SOS</span>
+          <span class="teto-sub-value">${window.Utils.formatarMoeda(teto_sos.limite_valor)}</span>
+          <span class="teto-sub-sep">·</span>
+          <span class="teto-sub-label">Realizado</span>
+          <span class="teto-sub-value">${window.Utils.formatarMoeda(teto_sos.valor_realizado)}</span>
+          <span class="teto-sub-sep">·</span>
+          <span class="teto-sub-label">Dif.</span>
+          <span class="teto-sub-value ${(diferenca_sos || 0) >= 0 ? 'positive' : 'negative'}">${window.Utils.formatarMoeda(Math.abs(diferenca_sos || 0))}</span>
+        </div>
+      </div>
+    ` : '';
+
+    // SOS info abaixo da barra de progresso
+    const sosInfoHtml = temSos
+      ? `<span class="teto-detail-sep">·</span><span class="teto-detail sos-detail-highlight">${teto_sos.limite_horas}h SOS</span>`
+      : '';
+
     return `
       <div class="teto-card">
         <div class="teto-header">
@@ -150,27 +197,29 @@
 
         <div class="teto-metrics">
           <div class="teto-metric teto-metric--primary">
-            <div class="teto-metric-label">Teto</div>
-            <div class="teto-metric-value">${window.Utils.formatarMoeda(total_valor)}</div>
+            <div class="teto-metric-label">${temSos ? 'Teto geral' : 'Teto'}</div>
+            <div class="teto-metric-value">${window.Utils.formatarMoeda(tetoGeralVal)}</div>
           </div>
           <div class="teto-metric">
-            <div class="teto-metric-label">Realizado</div>
-            <div class="teto-metric-value">${window.Utils.formatarMoeda(valor_realizado)}</div>
+            <div class="teto-metric-label">${temSos ? 'Realizado geral' : 'Realizado'}</div>
+            <div class="teto-metric-value">${window.Utils.formatarMoeda(realizadoGeral)}</div>
           </div>
           <div class="teto-metric teto-metric--${diferencaClass}">
-            <div class="teto-metric-label">Diferença</div>
+            <div class="teto-metric-label">${temSos ? 'Diferença geral' : 'Diferença'}</div>
             <div class="teto-metric-value">
               ${diferencaIcon}
-              ${window.Utils.formatarMoeda(Math.abs(diferenca))}
+              ${window.Utils.formatarMoeda(Math.abs(diferencaGeral))}
             </div>
           </div>
         </div>
+
+        ${subLinhasHtml}
 
         <div class="teto-progress">
           <div class="teto-progress-bar">
             <div class="teto-progress-fill" style="width: ${pctClamped}%; background: ${barColor}"></div>
           </div>
-          <div class="teto-progress-label">${percentual.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% utilizado</div>
+          <div class="teto-progress-label">${percentualGeral.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% utilizado</div>
         </div>
 
         <div class="teto-details-row">
@@ -179,6 +228,7 @@
           <span class="teto-detail">${dias ? dias.length : 0} dias</span>
           <span class="teto-detail-sep">·</span>
           <span class="teto-detail">${qtd_feriados} feriado${qtd_feriados !== 1 ? 's' : ''}</span>
+          ${sosInfoHtml}
         </div>
 
         ${compHtml ? `<div class="teto-composicao">${compHtml}</div>` : ''}
