@@ -382,7 +382,7 @@
           <div class="comp-vig-period">${vig.periodo}</div>
           ${semDados}
         </div>
-        <div class="comp-vig-teto">${window.Utils.formatarMoeda(vig.teto_valor)}</div>
+        <div class="comp-vig-teto">${window.Utils.formatarMoeda(vig.teto_geral || vig.teto_valor)}</div>
       </div>
     `;
   };
