@@ -26,6 +26,7 @@
    * @property {string} duracaoStr  - "HH:MM"
    * @property {number} duracaoHoras - Horas decimais
    * @property {number} valor       - Valor em reais (inteiro)
+   * @property {string} tipo        - Tipo do plantão ("Normal", "SOS", etc.)
    */
 
   /**
@@ -186,12 +187,14 @@
         if (/^\d{2}\/\d{2}\/\d{4}\s\d{2}:\d{2}$/.test(colC)) {
           const valor = typeof colK === 'number' ? colK : parseInt(String(colK), 10) || 0;
           const duracaoStr = window.Utils.normalizarDuracao(colI);
+          const tipo = colB ? colB : 'Normal';
           profAtual.plantoes.push({
             inicio: colC,
             fim: colD || '',
             duracaoStr,
             duracaoHoras: window.Utils.duracaoParaHorasDecimal(colI),
             valor,
+            tipo,
           });
         }
       }
@@ -762,6 +765,7 @@
         duracaoStr: window.Utils.normalizarDuracao(reg.duracao_h),
         duracaoHoras,
         valor: reg.valor,
+        tipo: reg.tipo || 'Normal',
       });
     });
 
@@ -821,6 +825,7 @@
           fim: pl.fim,
           duracao_h: pl.duracaoStr,
           valor: pl.valor,
+          tipo: pl.tipo || 'Normal',
         });
       });
     });
