@@ -75,7 +75,16 @@
 
     mainBody.innerHTML = renderPage();
     bindYearSelector();
-    await carregarDados();
+
+    try {
+      await carregarDados();
+    } catch (err) {
+      console.error('[SOS] Erro ao carregar dados:', err);
+      const container = document.getElementById('sosContent');
+      if (container) {
+        container.innerHTML = '<div class="sos-error">Erro ao carregar dados SOS. Tente novamente.</div>';
+      }
+    }
   };
 
   /**
@@ -128,22 +137,39 @@
 
     container.innerHTML = '<div class="sos-loading"><span class="spinner"></span> Carregando dados SOS...</div>';
 
-    const [resumoRes, limitesRes, historicoRes] = await Promise.all([
-      window.Api.request('resumo_sos_anual', { ano: state.anoAtivo }),
-      window.Api.request('obter_limites_sos', { ano: state.anoAtivo }),
-      window.Api.request('obter_historico_sos', { ano: state.anoAtivo }),
-    ]);
+    /** @type {Array<{ok: boolean, data?: *, error?: string}>} */
+    let results;
 
-    if (!resumoRes.ok) {
-      container.innerHTML = `<div class="sos-error">${window.Utils.escapeHtml(resumoRes.error || 'Erro ao carregar resumo SOS.')}</div>`;
+    try {
+      results = await Promise.all([
+        window.Api.request('resumo_sos_anual', { ano: state.anoAtivo }),
+        window.Api.request('obter_limites_sos', { ano: state.anoAtivo }),
+        window.Api.request('obter_historico_sos', { ano: state.anoAtivo }),
+      ]);
+    } catch (err) {
+      console.error('[SOS] Erro nas chamadas API:', err);
+      container.innerHTML = '<div class="sos-error">Erro de comunicação ao carregar dados SOS.</div>';
+      return;
+    }
+
+    const [resumoRes, limitesRes, historicoRes] = results;
+
+    if (!resumoRes || !resumoRes.ok) {
+      const msg = (resumoRes && resumoRes.error) || 'Erro ao carregar resumo SOS.';
+      container.innerHTML = `<div class="sos-error">${window.Utils.escapeHtml(msg)}</div>`;
       return;
     }
 
     state.resumo = resumoRes.data;
-    state.limites = limitesRes.ok ? limitesRes.data : null;
-    state.historico = historicoRes.ok ? historicoRes.data : null;
+    state.limites = (limitesRes && limitesRes.ok) ? limitesRes.data : null;
+    state.historico = (historicoRes && historicoRes.ok) ? historicoRes.data : null;
 
-    renderContent(container);
+    try {
+      renderContent(container);
+    } catch (err) {
+      console.error('[SOS] Erro ao renderizar conteúdo:', err);
+      container.innerHTML = '<div class="sos-error">Erro ao renderizar dados SOS. Verifique o console.</div>';
+    }
   };
 
   /**
@@ -314,9 +340,12 @@
    * @returns {string} HTML.
    */
   const renderHistorico = () => {
-    if (!state.historico || state.historico.historico.length === 0) return '';
+    const historicoArr = state.historico && Array.isArray(state.historico.historico)
+      ? state.historico.historico
+      : [];
+    if (historicoArr.length === 0) return '';
 
-    const entries = state.historico.historico;
+    const entries = historicoArr;
 
     const timelineHtml = entries.map((h) => {
       const mesNum = parseInt(h.vigencia_id.split('-')[1], 10);
