@@ -118,7 +118,7 @@
     return `
       <div class="prev-summary-grid">
         <div class="prev-summary-card prev-summary-card--primary">
-          <div class="prev-summary-label">Teto Anual Projetado</div>
+          <div class="prev-summary-label">Teto Total Anual Projetado</div>
           <div class="prev-summary-value">${window.Utils.formatarMoeda(dados.total_anual)}</div>
         </div>
         <div class="prev-summary-card">
@@ -171,12 +171,12 @@
         horasDisplay = '—';
       }
  
-      // Teto: pré-início → "R$ 0,00"; com dados → valor formatado; sem dados → "—"
+      // Teto total: pré-início → "R$ 0,00"; com dados → teto_geral ou teto_valor; sem dados → "—"
       let tetoDisplay;
       if (preInicio) {
         tetoDisplay = window.Utils.formatarMoeda(0);
       } else if (temDados) {
-        tetoDisplay = window.Utils.formatarMoeda(m.teto_valor);
+        tetoDisplay = window.Utils.formatarMoeda(m.teto_geral || m.teto_valor);
       } else {
         tetoDisplay = '—';
       }
@@ -212,7 +212,7 @@
               <th class="num">Úteis</th>
               <th class="num">Feriados</th>
               <th class="num">Horas</th>
-              <th class="num">Teto</th>
+              <th class="num">Teto total</th>
               <th>Status</th>
             </tr>
           </thead>
