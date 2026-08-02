@@ -771,3 +771,430 @@
   color: var(--fg-muted) !important;
   opacity: 0.7;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   SOS — Banco de Horas Emergencial
+   ═══════════════════════════════════════════════════════════ */
+
+
+/* ─── SOS Badge (inline em tabelas) ──────────────────────── */
+
+.sos-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 9999px;
+  line-height: 1;
+  vertical-align: middle;
+  margin-left: 0.35rem;
+}
+
+.sos-indicator {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ef4444;
+  margin-left: 0.35rem;
+  vertical-align: middle;
+  box-shadow: 0 0 4px rgba(239, 68, 68, 0.5);
+}
+
+.sos-row td {
+  color: #ef4444 !important;
+}
+
+
+/* ─── SOS Page ───────────────────────────────────────────── */
+
+.sos-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.sos-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.sos-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--fg);
+}
+
+.sos-toolbar-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.sos-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sos-year-select {
+  padding: 0.35rem 0.6rem;
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-family: var(--font);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+
+.sos-year-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.sos-loading {
+  padding: 2rem;
+  text-align: center;
+  color: var(--fg-muted);
+  font-size: 0.82rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.sos-error {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--danger);
+  font-size: 0.82rem;
+}
+
+
+/* ─── Resumo Anual (tabela) ──────────────────────────────── */
+
+.sos-resumo-card {
+  overflow: hidden;
+}
+
+.sos-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+}
+
+.sos-card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.sos-card-badge {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-radius: 9999px;
+}
+
+.sos-resumo-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.sos-resumo-table thead th {
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.sos-resumo-table thead th.num,
+.sos-resumo-table td.num {
+  text-align: right;
+}
+
+.sos-resumo-table tbody td {
+  padding: 0.55rem 0.75rem;
+  color: var(--fg);
+  border-bottom: 1px solid var(--border-soft, rgba(255,255,255,0.03));
+}
+
+.sos-resumo-row {
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.sos-resumo-row--active {
+  cursor: pointer;
+}
+
+.sos-resumo-row--active:hover {
+  background: var(--surface);
+}
+
+.sos-resumo-row.expanded {
+  background: var(--accent-dim);
+}
+
+.sos-resumo-nome {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.sos-chevron {
+  transition: transform var(--dur-fast) var(--ease-out);
+  opacity: 0.5;
+}
+
+.sos-resumo-row.expanded .sos-chevron {
+  transform: rotate(180deg);
+}
+
+
+/* ─── Filtros ────────────────────────────────────────────── */
+
+.sos-filtros {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.sos-filtro-btn {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  font-family: var(--font);
+  color: var(--fg-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+
+.sos-filtro-btn:hover {
+  color: var(--fg);
+  border-color: var(--fg-muted);
+}
+
+.sos-filtro-btn.active {
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+
+/* ─── Detalhe por vigência ───────────────────────────────── */
+
+.sos-detalhe-card {
+  overflow: hidden;
+}
+
+.sos-detalhe-empty {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--fg-muted);
+  font-size: 0.78rem;
+}
+
+.sos-detalhe-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.sos-detalhe-table thead th {
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.sos-detalhe-table tbody td {
+  padding: 0.45rem 0.75rem;
+  color: var(--fg);
+  border-bottom: 1px solid var(--border-soft, rgba(255,255,255,0.03));
+}
+
+.sos-detalhe-total td {
+  font-weight: 600;
+  border-top: 1px solid var(--border);
+  color: var(--fg);
+}
+
+
+/* ─── Editor de limites (admin) ──────────────────────────── */
+
+.sos-lim-card {
+  overflow: hidden;
+}
+
+.sos-lim-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.sos-lim-table thead th {
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.sos-lim-table tbody td {
+  padding: 0.4rem 0.75rem;
+  color: var(--fg);
+  border-bottom: 1px solid var(--border-soft, rgba(255,255,255,0.03));
+}
+
+.sos-lim-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.sos-lim-input {
+  width: 60px;
+  padding: 0.25rem 0.4rem;
+  background: var(--bg-elevated, #0a0a0c);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-family: var(--font);
+  text-align: right;
+}
+
+.sos-lim-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.sos-lim-unit {
+  color: var(--fg-muted);
+  font-size: 0.72rem;
+}
+
+.sos-lim-save-btn {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  font-family: var(--font);
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+
+.sos-lim-save-btn:hover {
+  background: var(--accent-soft);
+}
+
+.sos-lim-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+
+/* ─── Teto tripartido (sub-linhas SOS) ───────────────────── */
+
+.teto-sub-metrics {
+  padding: 0.5rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  border-top: 1px solid var(--border-soft, rgba(255,255,255,0.03));
+}
+
+.teto-sub-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  padding: 0 0.25rem;
+  flex-wrap: wrap;
+}
+
+.teto-sub-row--sos {
+  color: #ef4444;
+}
+
+.teto-sub-row--sos .teto-sub-label {
+  color: rgba(239, 68, 68, 0.7);
+}
+
+.teto-sub-label {
+  font-size: 0.68rem;
+  color: var(--fg-muted);
+}
+
+.teto-sub-value {
+  font-weight: 600;
+  font-size: 0.72rem;
+}
+
+.teto-sub-value.positive {
+  color: var(--success, #22c55e);
+}
+
+.teto-sub-value.negative {
+  color: var(--danger);
+}
+
+.teto-sub-sep {
+  color: var(--fg-muted);
+  opacity: 0.3;
+}
+
+.sos-detail-highlight {
+  color: #ef4444;
+  font-weight: 500;
+}
+
+
+/* ─── Histórico SOS ──────────────────────────────────────── */
+
+.sos-hist-dot {
+  background: #ef4444 !important;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+}
+
+.sos-hist-meta {
+  font-size: 0.65rem;
+  color: var(--fg-muted);
+  opacity: 0.6;
+  margin-top: 0.2rem;
+}
