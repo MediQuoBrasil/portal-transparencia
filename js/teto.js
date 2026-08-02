@@ -110,15 +110,22 @@
       teto, valor_realizado, diferenca, percentual,
       usou_snapshot, fonte,
       valor_realizado_plantoes, valor_realizado_sos,
-      diferenca_plantoes, diferenca_sos, teto_sos, teto_geral,
+      diferenca_plantoes, diferenca_sos,
     } = data;
     const { total_horas, total_valor, qtd_feriados, composicao, dias } = teto;
 
+    // Normalizar teto_sos — garantir objeto válido mesmo se backend retorna undefined
+    const teto_sos = data.teto_sos && typeof data.teto_sos === 'object'
+      ? data.teto_sos
+      : { limite_horas: 0, limite_valor: 0, horas_realizadas: 0, valor_realizado: 0 };
+
+    const teto_geral = data.teto_geral || (total_valor + (teto_sos.limite_valor || 0));
+
     // Determinar se há dados SOS
-    const temSos = teto_sos && teto_sos.limite_horas > 0;
+    const temSos = teto_sos.limite_horas > 0;
 
     // Usar teto geral se disponível, senão fallback
-    const tetoGeralVal = teto_geral || total_valor;
+    const tetoGeralVal = teto_geral;
     const realizadoGeral = valor_realizado || 0;
     const diferencaGeral = temSos ? (tetoGeralVal - realizadoGeral) : diferenca;
     const percentualGeral = tetoGeralVal > 0
