@@ -513,14 +513,19 @@
    * @returns {string} HTML das linhas internas do detalhe.
    */
   const renderProfDetail = (p) => {
-    const rows = p.plantoes.map((pl) => `
-      <tr>
-        <td>${window.Utils.escapeHtml(pl.inicio)}</td>
-        <td>${window.Utils.escapeHtml(pl.fim)}</td>
-        <td>${window.Utils.escapeHtml(pl.duracaoStr)}</td>
-        <td>${window.Utils.formatarMoeda(pl.valor)}</td>
-      </tr>
-    `).join('');
+    const rows = p.plantoes.map((pl) => {
+      const isSos = String(pl.tipo || '').trim().toUpperCase() === 'SOS';
+      const rowClass = isSos ? ' class="sos-row"' : '';
+      const badge = isSos ? ' <span class="sos-badge">SOS</span>' : '';
+      return `
+        <tr${rowClass}>
+          <td>${window.Utils.escapeHtml(pl.inicio)}</td>
+          <td>${window.Utils.escapeHtml(pl.fim)}</td>
+          <td>${window.Utils.escapeHtml(pl.duracaoStr)}${badge}</td>
+          <td>${window.Utils.formatarMoeda(pl.valor)}</td>
+        </tr>
+      `;
+    }).join('');
 
     return `
       <table class="prof-detail-table">
@@ -558,11 +563,15 @@
     const horas = window.Utils.formatarTotalHoras(p.totalHoras);
     const valor = window.Utils.formatarMoeda(p.totalValor);
 
+    const hasSos = p.plantoes.some((pl) => String(pl.tipo || '').trim().toUpperCase() === 'SOS');
+    const sosIndicator = hasSos ? '<span class="sos-indicator" title="Contém plantões SOS"></span>' : '';
+
     return `
       <tr class="prof-row" data-prof-idx="${idx}">
         <td class="prof-cell-name">
           <span class="prof-dot"></span>
           <span class="prof-name-text">${nome}</span>
+          ${sosIndicator}
           ${CHEVRON_SVG}
         </td>
         <td class="prof-cell-crm">${crm}</td>
@@ -1659,6 +1668,26 @@
         }
 
         window.Comparacao.render(state.anos, state.anoAtivo, state.mesAtivo || new Date().getMonth() + 1);
+      });
+    }
+
+    const btnSos = document.getElementById('btnSos');
+
+    if (btnSos) {
+      btnSos.addEventListener('click', () => {
+        limparSelecaoMes();
+        limparBtnsAnalise();
+        btnSos.classList.add('active');
+
+        // Fechar sidebar no mobile
+        if (window.innerWidth <= 768) {
+          const sidebar = document.getElementById('sidebar');
+          const overlay = document.getElementById('sidebarOverlay');
+          if (sidebar) sidebar.classList.remove('open');
+          if (overlay) overlay.classList.remove('open');
+        }
+
+        window.Sos.render(state.anos);
       });
     }
   };
