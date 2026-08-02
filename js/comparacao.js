@@ -53,16 +53,23 @@
     dias_fds: 'Fins de Semana',
     dias_feriado: 'Feriados',
     total_horas: 'Total de Horas',
-    teto_valor: 'Teto (R$)',
-    valor_realizado: 'Realizado (R$)',
-    diferenca: 'Diferença (R$)',
+    teto_valor: 'Teto plantões (R$)',
+    valor_realizado: 'Realizado/plantões (R$)',
+    diferenca: 'Diferença/plantões (R$)',
+    realizado_sos: 'Realizado/SOS (R$)',
+    teto_sos: 'Teto SOS (R$)',
+    teto_geral: 'Teto total (R$)',
+    horas_sos: 'Horas de SOS',
   };
 
   /** @type {Set<string>} */
-  const INDICADORES_MOEDA = new Set(['teto_valor', 'valor_realizado', 'diferenca']);
+  const INDICADORES_MOEDA = new Set([
+    'teto_valor', 'valor_realizado', 'diferenca',
+    'realizado_sos', 'teto_sos', 'teto_geral',
+  ]);
 
   /** @type {Set<string>} */
-  const INDICADORES_HORAS = new Set(['total_horas']);
+  const INDICADORES_HORAS = new Set(['total_horas', 'horas_sos']);
 
   /** @type {Object<string, string>} */
   const DIAS_LABEL = {
