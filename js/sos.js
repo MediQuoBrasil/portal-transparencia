@@ -9,8 +9,15 @@
  *  - Edição de limites (admin only)
  *  - Histórico de alterações (timeline read-only)
  *
+ *  Performance:
+ *  - Batch endpoint (batch_sos): 1 call = resumo + limites + historico
+ *  - Cache IndexedDB via window.Cache (stale-while-revalidate)
+ *  - In-memory state: troca de aba não recarrega se ano não mudou
+ *  - Seed de caches individuais a partir da resposta batch
+ *
  *  Dependências:
  *  - window.Api      (request)
+ *  - window.Cache    (get, set, isCacheable)
  *  - window.UI       (showLoading, hideLoading, showToast, escapeHtml)
  *  - window.Utils    (formatarMoeda, escapeHtml)
  *  - window.Auth     (getSession)
@@ -30,6 +37,8 @@
    * @property {Object|null} historico - Histórico SOS do backend
    * @property {string}    filtro      - 'cronologico' | 'maior_carga'
    * @property {number|null} vigenciaAberta - Índice do mês expandido (0–11)
+   * @property {number|null} lastLoadedAno  - Ano do último carregamento bem-sucedido
+   * @property {boolean}   loading     - Se há carregamento em andamento
    */
  
   /** @type {SosState} */
@@ -41,6 +50,8 @@
     historico: null,
     filtro: 'cronologico',
     vigenciaAberta: null,
+    lastLoadedAno: null,
+    loading: false,
   };
  
   // ─── Constantes ──────────────────────────────────────────
@@ -56,6 +67,8 @@
  
   /**
    * Ponto de entrada: renderiza a página SOS completa.
+   * Se o mesmo ano já está carregado em memória, exibe imediatamente
+   * sem buscar rede — eliminando loading ao retornar à aba.
    *
    * @param {number[]} anos - Anos disponíveis.
    * @returns {Promise<void>}
@@ -75,6 +88,21 @@
  
     mainBody.innerHTML = renderPage();
     bindYearSelector();
+ 
+    // ── Fast-path: dados do mesmo ano já estão em memória ──
+    if (state.lastLoadedAno === state.anoAtivo && state.resumo) {
+      const container = document.getElementById('sosContent');
+      if (container) {
+        try {
+          renderContent(container);
+        } catch (err) {
+          console.error('[SOS] Erro ao renderizar do cache em memória:', err);
+        }
+      }
+      // Revalidar em background (stale-while-revalidate)
+      revalidateBackground_();
+      return;
+    }
  
     try {
       await carregarDados();
@@ -124,34 +152,155 @@
     `;
   };
  
+  // ─── Cache helpers ──────────────────────────────────────────
+ 
+  /**
+   * Persiste os dados individuais (resumo, limites, historico) no cache
+   * a partir da resposta do batch_sos. Permite que chamadas individuais
+   * futuras façam cache hit sem rede.
+   *
+   * @param {number} ano - Ano.
+   * @param {Object} batchData - Dados retornados pelo batch_sos.
+   * @returns {Promise<void>}
+   * @private
+   */
+  const seedCachesFromBatch_ = async (ano, batchData) => {
+    const cache = window.Cache;
+    if (!cache) return;
+
+    const params = { ano };
+
+    /** @type {Promise<void>[]} */
+    const tasks = [];
+
+    if (batchData.resumo) {
+      tasks.push(cache.set('resumo_sos_anual', params, {
+        ok: true,
+        data: batchData.resumo,
+      }));
+    }
+
+    if (batchData.limites) {
+      tasks.push(cache.set('obter_limites_sos', params, {
+        ok: true,
+        data: batchData.limites,
+      }));
+    }
+
+    if (batchData.historico) {
+      tasks.push(cache.set('obter_historico_sos', params, {
+        ok: true,
+        data: batchData.historico,
+      }));
+    }
+
+    await Promise.all(tasks);
+  };
+
+  /**
+   * Revalida dados SOS em background sem exibir loading.
+   * Chamado quando o render usa dados in-memory (fast-path).
+   *
+   * @returns {void}
+   * @private
+   */
+  const revalidateBackground_ = () => {
+    window.Api.request('batch_sos', { ano: state.anoAtivo }).then((result) => {
+      if (!result.ok || !result.data) return;
+
+      const dados = result.data;
+      const resumoChanged = JSON.stringify(dados.resumo) !== JSON.stringify(state.resumo);
+      const limitesChanged = JSON.stringify(dados.limites) !== JSON.stringify(state.limites);
+
+      state.resumo = dados.resumo || state.resumo;
+      state.limites = dados.limites || state.limites;
+      state.historico = dados.historico || state.historico;
+
+      // Seed caches individuais em background
+      seedCachesFromBatch_(state.anoAtivo, dados);
+
+      // Se dados mudaram, re-renderizar silenciosamente
+      if (resumoChanged || limitesChanged) {
+        const container = document.getElementById('sosContent');
+        if (container) {
+          try {
+            renderContent(container);
+          } catch (_) {
+            // Não propagar — revalidação é best-effort
+          }
+        }
+      }
+    }).catch(() => {
+      // Falha silenciosa na revalidação — dados in-memory continuam válidos
+    });
+  };
+ 
   // ─── Carregamento de dados ────────────────────────────────
  
   /**
-   * Carrega resumo, limites e histórico em paralelo.
+   * Carrega resumo, limites e histórico via batch_sos (1 round-trip).
+   * Fallback para 3 chamadas individuais se batch não estiver disponível.
    *
    * @returns {Promise<void>}
    */
   const carregarDados = async () => {
     const container = document.getElementById('sosContent');
     if (!container) return;
+    if (state.loading) return;
  
+    state.loading = true;
     container.innerHTML = '<div class="sos-loading"><span class="spinner"></span> Carregando dados SOS...</div>';
  
-    /** @type {Array<{ok: boolean, data?: *, error?: string}>} */
-    let results;
- 
     try {
-      results = await Promise.all([
-        window.Api.request('resumo_sos_anual', { ano: state.anoAtivo }),
-        window.Api.request('obter_limites_sos', { ano: state.anoAtivo }),
-        window.Api.request('obter_historico_sos', { ano: state.anoAtivo }),
-      ]);
+      // ── Tentar batch_sos (1 call = tudo) ──
+      const batchResult = await window.Api.request('batch_sos', { ano: state.anoAtivo });
+ 
+      if (batchResult.ok && batchResult.data) {
+        const dados = batchResult.data;
+        state.resumo = dados.resumo || null;
+        state.limites = dados.limites || null;
+        state.historico = dados.historico || null;
+        state.lastLoadedAno = state.anoAtivo;
+ 
+        // Seed caches individuais em background
+        seedCachesFromBatch_(state.anoAtivo, dados);
+ 
+        try {
+          renderContent(container);
+        } catch (err) {
+          console.error('[SOS] Erro ao renderizar conteúdo:', err);
+          container.innerHTML = '<div class="sos-error">Erro ao renderizar dados SOS.</div>';
+        }
+        return;
+      }
+ 
+      // ── Fallback: 3 chamadas individuais ──
+      console.warn('[SOS] batch_sos falhou, fallback para chamadas individuais');
+      await carregarDadosIndividual_(container);
     } catch (err) {
       console.error('[SOS] Erro nas chamadas API:', err);
       container.innerHTML = '<div class="sos-error">Erro de comunicação ao carregar dados SOS.</div>';
-      return;
+    } finally {
+      state.loading = false;
     }
- 
+  };
+
+  /**
+   * Fallback: carrega dados SOS via 3 chamadas individuais em paralelo.
+   * Usado quando batch_sos não está disponível ou falha.
+   *
+   * @param {HTMLElement} container - Container alvo.
+   * @returns {Promise<void>}
+   * @private
+   */
+  const carregarDadosIndividual_ = async (container) => {
+    /** @type {Array<{ok: boolean, data?: *, error?: string}>} */
+    const results = await Promise.all([
+      window.Api.request('resumo_sos_anual', { ano: state.anoAtivo }),
+      window.Api.request('obter_limites_sos', { ano: state.anoAtivo }),
+      window.Api.request('obter_historico_sos', { ano: state.anoAtivo }),
+    ]);
+
     const [resumoRes, limitesRes, historicoRes] = results;
  
     if (!resumoRes || !resumoRes.ok) {
@@ -163,6 +312,7 @@
     state.resumo = resumoRes.data;
     state.limites = (limitesRes && limitesRes.ok) ? limitesRes.data : null;
     state.historico = (historicoRes && historicoRes.ok) ? historicoRes.data : null;
+    state.lastLoadedAno = state.anoAtivo;
  
     try {
       renderContent(container);
@@ -334,7 +484,6 @@
  
   /**
    * Renderiza o histórico de alterações de limites SOS.
-   * Mesmo padrão de timeline de js_teto.js:renderHistoricoAlteracoes.
    *
    * @returns {string} HTML.
    */
@@ -411,6 +560,8 @@
     sel.addEventListener('change', () => {
       state.anoAtivo = Number(sel.value);
       state.vigenciaAberta = null;
+      // Ano mudou → forçar reload (invalida in-memory)
+      state.lastLoadedAno = null;
       carregarDados();
     });
   };
@@ -438,7 +589,7 @@
         const mes = Number(row.dataset.sosMes);
         const detail = document.querySelector(`.sos-detail-row[data-sos-detail="${mes}"]`);
         const wasOpen = row.classList.contains('expanded');
-
+ 
         // Fechar todos
         document.querySelectorAll('.sos-resumo-row.expanded').forEach((r) => {
           r.classList.remove('expanded');
@@ -446,7 +597,7 @@
         document.querySelectorAll('.sos-detail-row.open').forEach((r) => {
           r.classList.remove('open');
         });
-
+ 
         // Abrir o clicado (se não estava aberto)
         if (!wasOpen && detail) {
           row.classList.add('expanded');
@@ -497,7 +648,9 @@
         if (result.data.alterado) {
           window.UI.showToast(`Limite de ${MESES_PT[mes - 1]} atualizado para ${novoLimite}h.`, 'success');
           btn.dataset.limOriginal = String(novoLimite);
-          await carregarDados(); // Recarregar tudo
+          // Invalidar in-memory para forçar reload
+          state.lastLoadedAno = null;
+          await carregarDados();
         } else {
           window.UI.showToast('Sem alteração.', 'info');
         }
@@ -516,33 +669,33 @@
   const carregarDetalheVigencia = async (mes) => {
     const container = document.getElementById(`sosDetail_${mes}`);
     if (!container) return;
-
+ 
     container.innerHTML = '<div class="sos-loading"><span class="spinner"></span> Carregando detalhe...</div>';
-
+ 
     const result = await window.Api.request('detalhe_vigencia', {
       ano: state.anoAtivo,
       mes,
     });
-
+ 
     if (!result.ok || !result.data.temDados) {
       container.innerHTML = '<div class="sos-detalhe-empty">Nenhum dado de plantão encontrado para esta vigência.</div>';
       return;
     }
-
+ 
     const registros = result.data.registros || [];
     const sosPl = registros.filter((r) => {
       const tipo = String(r.tipo || '').trim().toUpperCase();
       return tipo === 'SOS';
     });
-
+ 
     if (sosPl.length === 0) {
       container.innerHTML = '<div class="sos-detalhe-empty">Nenhum plantão SOS nesta vigência.</div>';
       return;
     }
-
+ 
     let totalHoras = 0;
     let totalValor = 0;
-
+ 
     const rowsHtml = sosPl.map((pl) => {
       const duracaoStr = String(pl.duracao_h || '').trim();
       const timeMatch = duracaoStr.match(/^(\d{1,3}):(\d{2})$/);
@@ -551,10 +704,10 @@
         : 0;
       totalHoras += horas;
       totalValor += pl.valor;
-
+ 
       const inicioFmt = String(pl.inicio || '').substring(0, 16);
       const fimFmt = String(pl.fim || '').substring(0, 16);
-
+ 
       return `
         <tr>
           <td>${window.Utils.escapeHtml(pl.profissional)}</td>
@@ -565,9 +718,9 @@
         </tr>
       `;
     }).join('');
-
+ 
     const totalHorasFmt = `${Math.floor(totalHoras)}h${Math.round((totalHoras % 1) * 60) > 0 ? `${Math.round((totalHoras % 1) * 60).toString().padStart(2, '0')}min` : ''}`;
-
+ 
     container.innerHTML = `
       <div class="sos-card-header">
         <span class="sos-card-title">${MESES_PT[mes - 1]}/${state.anoAtivo} — SOS</span>
@@ -595,7 +748,7 @@
     `;
   };
 
-    // ─── API pública ──────────────────────────────────────────
+  // ─── API pública ──────────────────────────────────────────
  
   window.Sos = { render };
 })();
