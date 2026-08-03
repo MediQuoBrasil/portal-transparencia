@@ -114,13 +114,30 @@
     if (loadingOverlay) loadingOverlay.classList.add('show');
 
     try {
+      console.log('[Auth] Credential recebida do GIS, chamando Api.login...');
       const result = await window.Api.login(response.credential);
 
+      console.log('[Auth] Resultado do login:', {
+        ok: result.ok,
+        code: result.code,
+        hasData: !!result.data,
+        error: result.error,
+        _debug: result._debug,
+      });
+
       if (!result.ok) {
-        // Distinguir deploy inválido de erro de autorização
-        const msg = result.code === 404
-          ? 'Servidor indisponível (deploy desatualizado). Contate o administrador.'
-          : (result.error || 'Acesso não autorizado.');
+        // Mensagem baseada no contexto retornado pelo parseResponse
+        let msg;
+        if (result.code === 403) {
+          msg = result.error || 'O Google exige reautorização. Contate o administrador.';
+        } else if (result.code === 404) {
+          msg = 'Servidor indisponível (deploy desatualizado). Contate o administrador.';
+        } else if (result.code === 401) {
+          msg = result.error || 'Acesso não autorizado. Verifique se seu e-mail está cadastrado.';
+        } else {
+          msg = result.error || 'Erro ao conectar ao servidor. Tente novamente.';
+        }
+
         showLoginError(msg);
         return;
       }
@@ -133,11 +150,13 @@
         role: result.data.role,
       });
 
+      console.log('[Auth] Login bem-sucedido:', result.data.email);
+
       // Inicializar app
       loginScreen.style.display = 'none';
       window.App.init(result.data);
     } catch (err) {
-      console.error('[Auth] Erro ao processar login:', err);
+      console.error('[Auth] Exceção inesperada no login:', err);
       showLoginError('Erro ao processar login. Tente novamente.');
     } finally {
       if (loadingOverlay) loadingOverlay.classList.remove('show');
