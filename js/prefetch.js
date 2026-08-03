@@ -81,6 +81,13 @@
 
   state.freshPromise = new Promise((resolve) => { state.freshResolve = resolve; });
 
+  // Pre-login fetch desabilitado — o backend Apps Script é
+  // single-threaded e chamadas pesadas pré-login (prefetch_publico
+  // + prefetch_publico_ano) saturam a fila, fazendo o login
+  // subsequente expirar por timeout. Resolver imediatamente
+  // garante que whenFresh() não pendure como promise órfã.
+  state.freshResolve(null);
+
   // ─── Constantes ────────────────────────────────────────────────
 
   /**
@@ -388,8 +395,13 @@
    */
   const whenFresh = () => state.freshPromise;
 
-  // Disparar IMEDIATAMENTE ao carregar o script
-  earlyPreLoginFetch();
+  // ⚠ earlyPreLoginFetch() NÃO dispara mais no carregamento do script.
+  // O backend Apps Script é single-threaded: as 2 chamadas pesadas
+  // de prefetch público (prefetch_publico + prefetch_publico_ano)
+  // saturavam a fila de execução, fazendo o login subsequente
+  // expirar por timeout. O fluxo pós-login (Vigencias.init →
+  // init_dashboard → startBackground) já cobre todo o carregamento
+  // de dados sem concorrer com o login.
 
   // ─── Single-flight: aguardar prefetch em voo ─────────────────
 
