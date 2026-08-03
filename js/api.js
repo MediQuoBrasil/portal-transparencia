@@ -58,6 +58,32 @@
   const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
 
   /**
+   * Registro de requisições em voo, para coalescência (single-flight).
+   * Chave: action + payload normalizado. Valor: Promise em andamento.
+   * @type {Map<string, Promise<ApiResult>>}
+   */
+  const inflight = new Map();
+
+  /**
+   * Compõe uma chave estável (chaves ordenadas) para identificar
+   * requisições idênticas. Payloads com as mesmas entradas produzem
+   * a mesma chave independente da ordem de inserção.
+   *
+   * @param {string} action - Nome da ação.
+   * @param {Object} payload - Dados adicionais.
+   * @returns {string} Chave de coalescência.
+   * @private
+   */
+  const inflightKey_ = (action, payload) => {
+    const p = payload || {};
+    const norm = Object.keys(p)
+      .sort()
+      .map((k) => `${k}=${p[k]}`)
+      .join('&');
+    return `${action}?${norm}`;
+  };
+
+  /**
    * Retorna o token JWT da sessão atual.
    * @returns {string|null}
    */
@@ -142,6 +168,34 @@
   };
 
   /**
+   * Coalescência de requisições (single-flight): requisições
+   * idênticas concorrentes compartilham UMA chamada de rede em vez
+   * de disparar N. Reduz a rajada de chamadas sobre o backend
+   * Apps Script — cujas execuções concorrentes competem por recursos
+   * e cujo endpoint de validação de token sofre throttling sob carga,
+   * a causa raiz da lentidão observada.
+   *
+   * Aplicado apenas a leituras (idempotentes). Escritas nunca são
+   * coalescidas — cada escrita é uma operação distinta.
+   *
+   * @param {string} action - Nome da ação.
+   * @param {Object} payload - Dados adicionais.
+   * @returns {Promise<ApiResult>}
+   * @private
+   */
+  const fetchCoalesced_ = (action, payload) => {
+    const key = inflightKey_(action, payload);
+    const existing = inflight.get(key);
+    if (existing) return existing;
+
+    const promise = fetchFromNetwork(action, payload)
+      .finally(() => { inflight.delete(key); });
+
+    inflight.set(key, promise);
+    return promise;
+  };
+
+  /**
    * Envia uma requisição autenticada ao backend.
    * Integra cache stale-while-revalidate para ações de leitura.
    *
@@ -163,7 +217,7 @@
         }
 
         // Cache stale → retorna imediato E revalida em background
-        fetchFromNetwork(action, payload).then(async (networkResult) => {
+        fetchCoalesced_(action, payload).then(async (networkResult) => {
           if (networkResult.ok) {
             await cache.set(action, payload, networkResult);
           }
@@ -173,7 +227,7 @@
       }
 
       // Sem cache → buscar da rede e armazenar
-      const networkResult = await fetchFromNetwork(action, payload);
+      const networkResult = await fetchCoalesced_(action, payload);
       if (networkResult.ok) {
         await cache.set(action, payload, networkResult);
       }
