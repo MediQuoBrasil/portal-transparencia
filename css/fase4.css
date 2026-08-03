@@ -973,11 +973,17 @@
 }
 
 
+.sos-card-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
 /* ─── Filtros ────────────────────────────────────────────── */
 
 .sos-filtros {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.35rem;
 }
 
 .sos-filtro-btn {
