@@ -97,6 +97,10 @@
 
   /**
    * POST público (sem token) ao backend.
+   * Valida que a resposta é JSON antes de parsear — quando o
+   * deploy do Apps Script está inválido, o redirect retorna
+   * HTML (404 do Google Drive) e response.json() lançaria
+   * exceção, quebrando o prefetch silenciosamente.
    *
    * @param {Object} body - Corpo da requisição (inclui `action`).
    * @returns {Promise<Object>} Resposta JSON parseada.
@@ -118,7 +122,20 @@
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
-      return response.json();
+
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json') && !contentType.includes('text/plain')) {
+        console.warn('[Prefetch] Resposta não-JSON (deploy inválido?). Status:', response.status);
+        return { ok: false, error: 'Deploy inválido' };
+      }
+
+      const text = await response.text();
+      try {
+        return JSON.parse(text);
+      } catch (_) {
+        console.warn('[Prefetch] Falha ao parsear resposta.');
+        return { ok: false, error: 'Resposta inválida' };
+      }
     } catch (err) {
       clearTimeout(timeoutId);
       throw err;
