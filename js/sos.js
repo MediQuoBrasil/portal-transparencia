@@ -185,7 +185,6 @@
  
     container.innerHTML = `
       ${renderResumoAnual()}
-      <div id="sosDetalheContainer"></div>
       ${isAdmin ? renderLimitesEditor() : ''}
       ${renderHistorico()}
     `;
@@ -224,11 +223,20 @@
         <tr class="${rowClass}" data-sos-mes="${m.mes}" data-sos-idx="${idx}">
           <td class="sos-resumo-nome">
             <span>${window.Utils.escapeHtml(m.nome)}</span>
-            ${hasData ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="sos-chevron"><polyline points="6 9 12 15 18 9"/></svg>' : ''}
+            ${hasData ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="sos-chevron"><polyline points="9 18 15 12 9 6"/></svg>' : ''}
           </td>
           <td class="num">${m.limite_horas}h</td>
           <td class="num">${m.realizado_horas > 0 ? `${m.realizado_horas}h` : '0h'}</td>
           <td class="num">${pctStr}</td>
+        </tr>
+        <tr class="sos-detail-row" data-sos-detail="${m.mes}">
+          <td colspan="4">
+            <div class="sos-detail-wrap">
+              <div class="sos-detail-inner" id="sosDetail_${m.mes}">
+                <div class="sos-loading"><span class="spinner"></span> Carregando...</div>
+              </div>
+            </div>
+          </td>
         </tr>
       `;
     }).join('');
@@ -428,20 +436,26 @@
     document.querySelectorAll('.sos-resumo-row--active').forEach((row) => {
       row.addEventListener('click', async () => {
         const mes = Number(row.dataset.sosMes);
- 
-        if (state.vigenciaAberta === mes) {
+        const detail = document.querySelector(`.sos-detail-row[data-sos-detail="${mes}"]`);
+        const wasOpen = row.classList.contains('expanded');
+
+        // Fechar todos
+        document.querySelectorAll('.sos-resumo-row.expanded').forEach((r) => {
+          r.classList.remove('expanded');
+        });
+        document.querySelectorAll('.sos-detail-row.open').forEach((r) => {
+          r.classList.remove('open');
+        });
+
+        // Abrir o clicado (se não estava aberto)
+        if (!wasOpen && detail) {
+          row.classList.add('expanded');
+          detail.classList.add('open');
+          state.vigenciaAberta = mes;
+          await carregarDetalheVigencia(mes);
+        } else {
           state.vigenciaAberta = null;
-          document.querySelectorAll('.sos-resumo-row').forEach((r) => r.classList.remove('expanded'));
-          const detalheContainer = document.getElementById('sosDetalheContainer');
-          if (detalheContainer) detalheContainer.innerHTML = '';
-          return;
         }
- 
-        state.vigenciaAberta = mes;
-        document.querySelectorAll('.sos-resumo-row').forEach((r) => r.classList.remove('expanded'));
-        row.classList.add('expanded');
- 
-        await carregarDetalheVigencia(mes);
       });
     });
   };
@@ -500,50 +514,35 @@
    * @returns {Promise<void>}
    */
   const carregarDetalheVigencia = async (mes) => {
-    const container = document.getElementById('sosDetalheContainer');
+    const container = document.getElementById(`sosDetail_${mes}`);
     if (!container) return;
- 
+
     container.innerHTML = '<div class="sos-loading"><span class="spinner"></span> Carregando detalhe...</div>';
- 
+
     const result = await window.Api.request('detalhe_vigencia', {
       ano: state.anoAtivo,
       mes,
     });
- 
+
     if (!result.ok || !result.data.temDados) {
-      container.innerHTML = `
-        <div class="card sos-detalhe-card">
-          <div class="sos-card-header">
-            <span class="sos-card-title">${MESES_PT[mes - 1]}/${state.anoAtivo} — SOS</span>
-          </div>
-          <div class="sos-detalhe-empty">Nenhum dado de plantão encontrado para esta vigência.</div>
-        </div>
-      `;
+      container.innerHTML = '<div class="sos-detalhe-empty">Nenhum dado de plantão encontrado para esta vigência.</div>';
       return;
     }
- 
+
     const registros = result.data.registros || [];
     const sosPl = registros.filter((r) => {
       const tipo = String(r.tipo || '').trim().toUpperCase();
       return tipo === 'SOS';
     });
- 
+
     if (sosPl.length === 0) {
-      container.innerHTML = `
-        <div class="card sos-detalhe-card">
-          <div class="sos-card-header">
-            <span class="sos-card-title">${MESES_PT[mes - 1]}/${state.anoAtivo} — SOS</span>
-          </div>
-          <div class="sos-detalhe-empty">Nenhum plantão SOS nesta vigência.</div>
-        </div>
-      `;
+      container.innerHTML = '<div class="sos-detalhe-empty">Nenhum plantão SOS nesta vigência.</div>';
       return;
     }
- 
-    // Agregar por profissional
+
     let totalHoras = 0;
     let totalValor = 0;
- 
+
     const rowsHtml = sosPl.map((pl) => {
       const duracaoStr = String(pl.duracao_h || '').trim();
       const timeMatch = duracaoStr.match(/^(\d{1,3}):(\d{2})$/);
@@ -552,10 +551,10 @@
         : 0;
       totalHoras += horas;
       totalValor += pl.valor;
- 
+
       const inicioFmt = String(pl.inicio || '').substring(0, 16);
       const fimFmt = String(pl.fim || '').substring(0, 16);
- 
+
       return `
         <tr>
           <td>${window.Utils.escapeHtml(pl.profissional)}</td>
@@ -566,39 +565,37 @@
         </tr>
       `;
     }).join('');
- 
+
     const totalHorasFmt = `${Math.floor(totalHoras)}h${Math.round((totalHoras % 1) * 60) > 0 ? `${Math.round((totalHoras % 1) * 60).toString().padStart(2, '0')}min` : ''}`;
- 
+
     container.innerHTML = `
-      <div class="card sos-detalhe-card">
-        <div class="sos-card-header">
-          <span class="sos-card-title">${MESES_PT[mes - 1]}/${state.anoAtivo} — SOS</span>
-          <span class="sos-badge">${sosPl.length} plantão${sosPl.length !== 1 ? 'ões' : ''}</span>
-        </div>
-        <table class="sos-detalhe-table">
-          <thead>
-            <tr>
-              <th>Profissional</th>
-              <th>Início</th>
-              <th>Fim</th>
-              <th class="num">Dur.</th>
-              <th class="num">R$</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rowsHtml}
-            <tr class="sos-detalhe-total">
-              <td colspan="3">Total</td>
-              <td class="num">${totalHorasFmt}</td>
-              <td class="num">${window.Utils.formatarMoeda(totalValor)}</td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="sos-card-header">
+        <span class="sos-card-title">${MESES_PT[mes - 1]}/${state.anoAtivo} — SOS</span>
+        <span class="sos-badge">${sosPl.length} plantão${sosPl.length !== 1 ? 'ões' : ''}</span>
       </div>
+      <table class="sos-detalhe-table">
+        <thead>
+          <tr>
+            <th>Profissional</th>
+            <th>Início</th>
+            <th>Fim</th>
+            <th class="num">Dur.</th>
+            <th class="num">R$</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+          <tr class="sos-detalhe-total">
+            <td colspan="3">Total</td>
+            <td class="num">${totalHorasFmt}</td>
+            <td class="num">${window.Utils.formatarMoeda(totalValor)}</td>
+          </tr>
+        </tbody>
+      </table>
     `;
   };
- 
-  // ─── API pública ──────────────────────────────────────────
+
+    // ─── API pública ──────────────────────────────────────────
  
   window.Sos = { render };
 })();
