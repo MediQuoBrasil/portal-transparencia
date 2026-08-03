@@ -513,14 +513,19 @@
    * @returns {string} HTML das linhas internas do detalhe.
    */
   const renderProfDetail = (p) => {
-    const rows = p.plantoes.map((pl) => `
-      <tr>
-        <td>${window.Utils.escapeHtml(pl.inicio)}</td>
-        <td>${window.Utils.escapeHtml(pl.fim)}</td>
-        <td>${window.Utils.escapeHtml(pl.duracaoStr)}</td>
-        <td>${window.Utils.formatarMoeda(pl.valor)}</td>
-      </tr>
-    `).join('');
+    const rows = p.plantoes.map((pl) => {
+      const isSos = String(pl.tipo || '').trim().toUpperCase() === 'SOS';
+      const rowClass = isSos ? ' class="sos-row"' : '';
+      const badge = isSos ? ' <span class="sos-badge">SOS</span>' : '';
+      return `
+        <tr${rowClass}>
+          <td>${window.Utils.escapeHtml(pl.inicio)}</td>
+          <td>${window.Utils.escapeHtml(pl.fim)}</td>
+          <td>${window.Utils.escapeHtml(pl.duracaoStr)}${badge}</td>
+          <td>${window.Utils.formatarMoeda(pl.valor)}</td>
+        </tr>
+      `;
+    }).join('');
 
     return `
       <table class="prof-detail-table">
@@ -557,12 +562,15 @@
     const crm = window.Utils.escapeHtml(p.crm);
     const horas = window.Utils.formatarTotalHoras(p.totalHoras);
     const valor = window.Utils.formatarMoeda(p.totalValor);
+    const hasSos = p.plantoes.some((pl) => String(pl.tipo || '').trim().toUpperCase() === 'SOS');
+    const sosIndicator = hasSos ? '<span class="sos-indicator" title="Contém plantões SOS"></span>' : '';
 
     return `
       <tr class="prof-row" data-prof-idx="${idx}">
         <td class="prof-cell-name">
           <span class="prof-dot"></span>
           <span class="prof-name-text">${nome}</span>
+          ${sosIndicator}
           ${CHEVRON_SVG}
         </td>
         <td class="prof-cell-crm">${crm}</td>
@@ -680,6 +688,7 @@
           duracaoStr: pl.duracaoStr,
           duracaoHoras: pl.duracaoHoras,
           valor: pl.valor,
+          tipo: pl.tipo || 'Normal',
         });
       });
     });
@@ -720,15 +729,20 @@
       a.profissional.localeCompare(b.profissional, 'pt-BR'),
     );
 
-    const rows = sorted.map((p) => `
-      <tr>
-        <td>${window.Utils.escapeHtml(p.profissional)}</td>
-        <td>${window.Utils.escapeHtml(p.inicio)}</td>
-        <td>${window.Utils.escapeHtml(p.fim)}</td>
-        <td>${window.Utils.escapeHtml(p.duracaoStr)}</td>
-        <td>${window.Utils.formatarMoeda(p.valor)}</td>
-      </tr>
-    `).join('');
+    const rows = sorted.map((p) => {
+      const isSos = String(p.tipo || '').trim().toUpperCase() === 'SOS';
+      const rowClass = isSos ? ' class="sos-row"' : '';
+      const badge = isSos ? ' <span class="sos-badge">SOS</span>' : '';
+      return `
+        <tr${rowClass}>
+          <td>${window.Utils.escapeHtml(p.profissional)}</td>
+          <td>${window.Utils.escapeHtml(p.inicio)}</td>
+          <td>${window.Utils.escapeHtml(p.fim)}</td>
+          <td>${window.Utils.escapeHtml(p.duracaoStr)}${badge}</td>
+          <td>${window.Utils.formatarMoeda(p.valor)}</td>
+        </tr>
+      `;
+    }).join('');
 
     return `
       <table class="dia-detail-table">
@@ -766,12 +780,15 @@
   const renderDiaRow = (dia, totais, horasPct, valorPct, idx, plantoesDia) => {
     const horas = window.Utils.formatarTotalHoras(totais.horas);
     const valor = window.Utils.formatarMoeda(totais.valor);
+    const hasSos = plantoesDia.some((p) => String(p.tipo || '').trim().toUpperCase() === 'SOS');
+    const sosIndicator = hasSos ? '<span class="sos-indicator" title="Contém plantões SOS"></span>' : '';
 
     return `
       <tr class="dia-row" data-dia-idx="${idx}">
         <td class="dia-cell-data">
           <span class="dia-dot"></span>
           <span class="dia-data-text">${window.Utils.escapeHtml(dia)}</span>
+          ${sosIndicator}
           ${DIA_CHEVRON_SVG}
         </td>
         <td class="dia-cell-metric"><span class="dia-metric-val">${horas}</span><span class="dia-pct">${horasPct}</span></td>
