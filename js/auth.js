@@ -117,7 +117,11 @@
       const result = await window.Api.login(response.credential);
 
       if (!result.ok) {
-        showLoginError(result.error || 'Acesso não autorizado.');
+        // Distinguir deploy inválido de erro de autorização
+        const msg = result.code === 404
+          ? 'Servidor indisponível (deploy desatualizado). Contate o administrador.'
+          : (result.error || 'Acesso não autorizado.');
+        showLoginError(msg);
         return;
       }
 
