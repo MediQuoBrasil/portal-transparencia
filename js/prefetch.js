@@ -85,11 +85,13 @@
 
   /**
    * Timeout para aguardar o prefetch leve em getPreLoginData (ms).
-   * Se o prefetch não completa em 4s, getPreLoginData retorna null
-   * e o init faz fallback para init_dashboard (autenticado).
+   * Apps Script POST→302→redirect pode levar 6-20s (cold-start).
+   * 10s cobre a maioria dos cenários quentes; no cold-start, o
+   * fallback para init_dashboard (que também aguarda o backend)
+   * assume sem perda adicional.
    * @type {number}
    */
-  const PRE_LOGIN_TIMEOUT = 4000;
+  const PRE_LOGIN_TIMEOUT = 10000;
 
   // ─── Helpers ─────────────────────────────────────────────────
 
@@ -102,13 +104,17 @@
    */
   const postPublico_ = async (body) => {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => { controller.abort(); }, 20000);
+    // Apps Script: POST→302→GET redirect chain pode levar 20-25s
+    // em cold-start. 50s evita cancelar requests que estão prestes
+    // a completar (o gargalo está no backend, não na rede).
+    const timeoutId = setTimeout(() => { controller.abort(); }, 50000);
 
     try {
       const response = await fetch(window.AppConfig.API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify(body),
+        redirect: 'follow',
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
