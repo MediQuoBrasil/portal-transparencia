@@ -107,7 +107,7 @@
 
         clearTimeout(timeoutId);
 
-        const data = await response.json();
+        const data = await parseResponse(response);
 
         if (data.ok === false && data.code === 401) {
           window.Auth.logout();
@@ -185,33 +185,99 @@
   };
 
   /**
+   * Verifica se a resposta é JSON válido antes de parsear.
+   * Quando o deploy do Apps Script está inválido, a URL do
+   * redirect retorna HTML (404 do Google Drive) em vez de JSON.
+   * Sem essa verificação, response.json() lança exceção
+   * silenciosa e o login falha sem informação útil.
+   *
+   * @param {Response} response - Resposta do fetch.
+   * @returns {Promise<ApiResult>}
+   */
+  const parseResponse = async (response) => {
+    const contentType = response.headers.get('content-type') || '';
+
+    if (!contentType.includes('application/json') && !contentType.includes('text/plain')) {
+      console.error('[API] Resposta não-JSON. Content-Type:', contentType, 'Status:', response.status);
+      return {
+        ok: false,
+        error: 'O servidor retornou uma resposta inválida. '
+          + 'Verifique se a URL de deploy do Apps Script está atualizada.',
+        code: response.status,
+      };
+    }
+
+    const text = await response.text();
+
+    try {
+      return JSON.parse(text);
+    } catch (_) {
+      console.error('[API] Falha ao parsear JSON. Primeiros 200 chars:', text.slice(0, 200));
+      return {
+        ok: false,
+        error: 'Resposta inválida do servidor. A URL de deploy pode estar desatualizada.',
+      };
+    }
+  };
+
+  /**
    * Envia requisição de login (sem token pré-existente).
+   * Usa retry com backoff idêntico ao fetchFromNetwork para
+   * resistir a cold-starts e falhas transitórias do Apps Script.
    *
    * @param {string} idToken - JWT do Google Identity Services.
    * @returns {Promise<ApiResult>}
    */
   const login = async (idToken) => {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => { controller.abort(); }, FETCH_TIMEOUT);
+    const body = JSON.stringify({ action: 'login', token: idToken });
+    let lastError = 'Falha na comunicação com o servidor.';
 
-      const response = await fetch(window.AppConfig.API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'login', token: idToken }),
-        redirect: 'follow',
-        signal: controller.signal,
-      });
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+      /** @type {AbortController|null} */
+      let controller = null;
+      /** @type {number|null} */
+      let timeoutId = null;
 
-      clearTimeout(timeoutId);
-      return await response.json();
-    } catch (err) {
-      const msg = err.name === 'AbortError'
-        ? 'O servidor demorou demais. Tente novamente.'
-        : 'Falha na comunicação com o servidor.';
-      console.error('[API] Erro no login:', err.message);
-      return { ok: false, error: msg };
+      try {
+        controller = new AbortController();
+        timeoutId = setTimeout(() => { controller.abort(); }, FETCH_TIMEOUT);
+
+        const response = await fetch(window.AppConfig.API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body,
+          redirect: 'follow',
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        const data = await parseResponse(response);
+
+        // Resposta inválida (HTML 404 do Google Drive, etc.)
+        // que indica deploy quebrado — não vale retry.
+        if (!data.ok && data.code === 404) {
+          return data;
+        }
+
+        return data;
+      } catch (err) {
+        if (timeoutId) clearTimeout(timeoutId);
+
+        const isAbort = err.name === 'AbortError';
+        lastError = isAbort
+          ? 'O servidor demorou demais. Tente novamente.'
+          : (err.message || 'Falha na comunicação com o servidor.');
+
+        console.error(`[API] Login tentativa ${attempt + 1} falhou:`, lastError);
+
+        if (attempt < MAX_RETRIES) {
+          await wait(RETRY_DELAY * (attempt + 1));
+        }
+      }
     }
+
+    return { ok: false, error: lastError };
   };
 
   window.Api = { request, login };
