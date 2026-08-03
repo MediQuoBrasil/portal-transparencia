@@ -1204,3 +1204,43 @@
   opacity: 0.6;
   margin-top: 0.2rem;
 }
+
+
+/* ─── SOS inline detail rows (accordion) ──────────────────── */
+
+.sos-detail-row {
+  display: none;
+}
+
+.sos-detail-row.open {
+  display: table-row;
+}
+
+.sos-detail-row > td {
+  padding: 0 !important;
+  border-bottom: none !important;
+}
+
+.sos-detail-wrap {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.3s var(--ease-out, ease-out);
+}
+
+.sos-detail-row.open .sos-detail-wrap {
+  max-height: 600px;
+}
+
+.sos-detail-inner {
+  padding: 0.5rem 0.75rem 0.75rem;
+  background: var(--surface, rgba(255,255,255,0.03));
+  border-bottom: 1px solid var(--border, rgba(255,255,255,0.06));
+}
+
+.sos-resumo-row--active .sos-chevron {
+  transition: transform var(--dur-fast, 200ms) var(--ease-out, ease-out);
+}
+
+.sos-resumo-row.expanded .sos-chevron {
+  transform: rotate(90deg);
+}
