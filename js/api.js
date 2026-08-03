@@ -107,7 +107,7 @@
 
         clearTimeout(timeoutId);
 
-        const data = await parseResponse(response);
+        const data = await parseResponse(response, action);
 
         if (data.ok === false && data.code === 401) {
           window.Auth.logout();
@@ -119,11 +119,18 @@
         if (timeoutId) clearTimeout(timeoutId);
 
         const isAbort = err.name === 'AbortError';
+        const isNetwork = err instanceof TypeError;
         lastError = isAbort
           ? 'O servidor demorou demais para responder.'
           : (err.message || 'Falha na comunicação.');
 
-        console.error(`[API] Tentativa ${attempt + 1} falhou:`, lastError);
+        console.error(`[API] Tentativa ${attempt + 1} (${action}) falhou:`, {
+          error: lastError,
+          type: err.name,
+          isAbort,
+          isNetwork,
+          message: err.message,
+        });
 
         if (attempt < MAX_RETRIES) {
           await wait(RETRY_DELAY * (attempt + 1));
@@ -185,45 +192,132 @@
   };
 
   /**
-   * Verifica se a resposta é JSON válido antes de parsear.
-   * Quando o deploy do Apps Script está inválido, a URL do
-   * redirect retorna HTML (404 do Google Drive) em vez de JSON.
-   * Sem essa verificação, response.json() lança exceção
-   * silenciosa e o login falha sem informação útil.
+   * Parseia a resposta do fetch ao backend.
    *
-   * @param {Response} response - Resposta do fetch.
+   * Estratégia: sempre tenta parsear o body como JSON, independente
+   * do Content-Type. O echo URL do Google Apps Script (destino do
+   * redirect 302) nem sempre retorna o Content-Type correto —
+   * pode vir text/html, text/javascript ou até vazio, mesmo quando
+   * o body é JSON válido gerado por ContentService.setMimeType(JSON).
+   * Bloquear o parse pelo Content-Type causa falsos positivos de
+   * "deploy desatualizado" quando o backend respondeu corretamente.
+   *
+   * @param {Response} response - Resposta do fetch (pós-redirect).
+   * @param {string}   [context='request'] - Contexto para logs.
    * @returns {Promise<ApiResult>}
    */
-  const parseResponse = async (response) => {
+  const parseResponse = async (response, context = 'request') => {
     const contentType = response.headers.get('content-type') || '';
+    const status = response.status;
+    const finalUrl = response.url || '(indisponível)';
+    const redirected = response.redirected || false;
 
-    if (!contentType.includes('application/json') && !contentType.includes('text/plain')) {
-      console.error('[API] Resposta não-JSON. Content-Type:', contentType, 'Status:', response.status);
-      return {
-        ok: false,
-        error: 'O servidor retornou uma resposta inválida. '
-          + 'Verifique se a URL de deploy do Apps Script está atualizada.',
-        code: response.status,
-      };
-    }
+    // ── Log de diagnóstico ──
+    console.log(`[API][${context}] Resposta recebida:`, {
+      status,
+      contentType,
+      redirected,
+      finalUrl: finalUrl.slice(0, 120),
+      type: response.type,
+    });
 
-    const text = await response.text();
-
+    // ── Ler o body como texto (seguro para qualquer content-type) ──
+    let text;
     try {
-      return JSON.parse(text);
-    } catch (_) {
-      console.error('[API] Falha ao parsear JSON. Primeiros 200 chars:', text.slice(0, 200));
+      text = await response.text();
+    } catch (readErr) {
+      console.error(`[API][${context}] Erro ao ler body:`, readErr.message);
       return {
         ok: false,
-        error: 'Resposta inválida do servidor. A URL de deploy pode estar desatualizada.',
+        error: 'Não foi possível ler a resposta do servidor.',
+        code: status,
+        _debug: { phase: 'body_read', readError: readErr.message },
       };
     }
+
+    // ── Tentar parsear como JSON (independente do Content-Type) ──
+    try {
+      const parsed = JSON.parse(text);
+
+      // Log se Content-Type estava "errado" mas JSON era válido
+      if (!contentType.includes('application/json') && !contentType.includes('text/plain')) {
+        console.warn(
+          `[API][${context}] JSON válido apesar de Content-Type inesperado:`,
+          contentType,
+        );
+      }
+
+      return parsed;
+    } catch (_) {
+      // JSON inválido — agora sim é problema real
+    }
+
+    // ── Body não é JSON — diagnóstico detalhado ──
+    const preview = text.slice(0, 300);
+    const isHtml = contentType.includes('text/html') || text.trimStart().startsWith('<');
+    const isGoogleError = text.includes('ServiceLogin') || text.includes('accounts.google.com');
+    const is404Page = status === 404 || text.includes('404') || text.includes('not found');
+
+    console.error(`[API][${context}] Resposta não-JSON.`, {
+      status,
+      contentType,
+      isHtml,
+      isGoogleError,
+      is404Page,
+      bodyPreview: preview,
+      redirected,
+      finalUrl: finalUrl.slice(0, 120),
+    });
+
+    // ── Classificação do erro ──
+    if (isGoogleError) {
+      return {
+        ok: false,
+        error: 'O Google exige reautorização do Apps Script. '
+          + 'Abra o editor do script, execute qualquer função manualmente e re-autorize.',
+        code: 403,
+        _debug: { phase: 'google_auth_wall', status, contentType },
+      };
+    }
+
+    if (is404Page) {
+      return {
+        ok: false,
+        error: 'O servidor retornou página de erro (404). '
+          + 'O deploy do Apps Script pode estar desatualizado.',
+        code: 404,
+        _debug: { phase: 'not_found', status, contentType },
+      };
+    }
+
+    if (isHtml) {
+      return {
+        ok: false,
+        error: `O servidor retornou HTML em vez de JSON (HTTP ${status}). `
+          + 'Possível erro no deploy do Apps Script.',
+        code: status,
+        _debug: { phase: 'html_response', status, contentType, preview },
+      };
+    }
+
+    return {
+      ok: false,
+      error: `Resposta inesperada do servidor (HTTP ${status}, tipo: ${contentType || 'vazio'}).`,
+      code: status,
+      _debug: { phase: 'unknown_format', status, contentType, preview },
+    };
   };
 
   /**
    * Envia requisição de login (sem token pré-existente).
-   * Usa retry com backoff idêntico ao fetchFromNetwork para
-   * resistir a cold-starts e falhas transitórias do Apps Script.
+   * Usa retry com backoff para resistir a cold-starts e falhas
+   * transitórias do Apps Script.
+   *
+   * Diferenças em relação ao fetchFromNetwork:
+   * - Retry em TODO erro não-permanente (inclusive 404 transitório
+   *   do echo URL do Google, que pode ser infraestrutura e não deploy).
+   * - Só aborta retry cedo se o body for uma página de auth Google
+   *   (code 403), que exige ação manual e não resolve com retry.
    *
    * @param {string} idToken - JWT do Google Identity Services.
    * @returns {Promise<ApiResult>}
@@ -231,6 +325,10 @@
   const login = async (idToken) => {
     const body = JSON.stringify({ action: 'login', token: idToken });
     let lastError = 'Falha na comunicação com o servidor.';
+    /** @type {ApiResult|null} */
+    let lastResult = null;
+
+    console.log('[API][login] Iniciando login. URL:', window.AppConfig.API_URL.slice(0, 80));
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
       /** @type {AbortController|null} */
@@ -242,6 +340,7 @@
         controller = new AbortController();
         timeoutId = setTimeout(() => { controller.abort(); }, FETCH_TIMEOUT);
 
+        const t0 = Date.now();
         const response = await fetch(window.AppConfig.API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'text/plain' },
@@ -251,33 +350,58 @@
         });
 
         clearTimeout(timeoutId);
+        const elapsed = Date.now() - t0;
 
-        const data = await parseResponse(response);
+        console.log(`[API][login] Fetch completou em ${elapsed}ms. ` +
+          `Status: ${response.status}, Redirected: ${response.redirected}, ` +
+          `URL final: ${(response.url || '').slice(0, 100)}`);
 
-        // Resposta inválida (HTML 404 do Google Drive, etc.)
-        // que indica deploy quebrado — não vale retry.
-        if (!data.ok && data.code === 404) {
+        const data = await parseResponse(response, 'login');
+
+        // Auth wall do Google → não vale retry, exige ação manual
+        if (!data.ok && data.code === 403 && data._debug?.phase === 'google_auth_wall') {
           return data;
         }
 
-        return data;
+        // Resposta com sucesso ou erro de negócio (401 etc.) → retornar
+        if (data.ok || (data.code && data.code < 500 && data.code !== 404)) {
+          return data;
+        }
+
+        // Erros 5xx ou 404 (pode ser transitório no echo URL) → retry
+        lastResult = data;
+        lastError = data.error || lastError;
+
+        console.warn(`[API][login] Tentativa ${attempt + 1}: erro potencialmente transitório.`, {
+          code: data.code,
+          phase: data._debug?.phase,
+        });
       } catch (err) {
         if (timeoutId) clearTimeout(timeoutId);
 
         const isAbort = err.name === 'AbortError';
+        const isNetwork = err instanceof TypeError;
         lastError = isAbort
           ? 'O servidor demorou demais. Tente novamente.'
           : (err.message || 'Falha na comunicação com o servidor.');
 
-        console.error(`[API] Login tentativa ${attempt + 1} falhou:`, lastError);
+        console.error(`[API][login] Tentativa ${attempt + 1} exceção:`, {
+          error: lastError,
+          type: err.name,
+          isAbort,
+          isNetwork,
+        });
+      }
 
-        if (attempt < MAX_RETRIES) {
-          await wait(RETRY_DELAY * (attempt + 1));
-        }
+      if (attempt < MAX_RETRIES) {
+        const delay = RETRY_DELAY * (attempt + 1);
+        console.log(`[API][login] Aguardando ${delay}ms antes do retry...`);
+        await wait(delay);
       }
     }
 
-    return { ok: false, error: lastError };
+    // Todas as tentativas falharam — retornar o resultado mais informativo
+    return lastResult || { ok: false, error: lastError };
   };
 
   window.Api = { request, login };
