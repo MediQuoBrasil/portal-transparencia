@@ -23,7 +23,7 @@
   const DB_NAME = 'mediquo_cache';
 
   /** @type {number} */
-  const DB_VERSION = 1;
+  const DB_VERSION = 2;
 
   /** @type {string} */
   const STORE_NAME = 'api_cache';
@@ -107,9 +107,13 @@
         request.onupgradeneeded = (e) => {
           const target = /** @type {IDBOpenDBRequest} */ (e.target);
           const database = target.result;
-          if (!database.objectStoreNames.contains(STORE_NAME)) {
-            database.createObjectStore(STORE_NAME, { keyPath: 'key' });
+
+          // Upgrade de versão: deletar store antigo e recriar para
+          // purgar entradas sem campos SOS (teto_sos, tipo, etc.)
+          if (database.objectStoreNames.contains(STORE_NAME)) {
+            database.deleteObjectStore(STORE_NAME);
           }
+          database.createObjectStore(STORE_NAME, { keyPath: 'key' });
         };
 
         request.onsuccess = (e) => {
@@ -517,6 +521,34 @@
    * @returns {boolean}
    */
   const isCacheable = (action) => Boolean(ACTION_TTL[action]);
+
+  // ─── Migração de localStorage ─────────────────────────────
+  // Purga entradas stale quando a versão do cache muda.
+  // Necessário porque o localStorage é fallback/backup do IDB
+  // e pode conter dados sem campos SOS (teto_sos, tipo, etc.).
+
+  /** @type {string} */
+  const LS_VERSION_KEY = 'mq_cache_version';
+
+  const migrateLocalStorage_ = () => {
+    try {
+      const storedVersion = Number(localStorage.getItem(LS_VERSION_KEY)) || 0;
+      if (storedVersion < DB_VERSION) {
+        // Limpar todas as entradas do app no localStorage
+        const keys = [];
+        for (let i = 0; i < localStorage.length; i += 1) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('mq_')) keys.push(k);
+        }
+        keys.forEach((k) => { localStorage.removeItem(k); });
+        localStorage.setItem(LS_VERSION_KEY, String(DB_VERSION));
+      }
+    } catch (_) {
+      // Silenciar — migração é best-effort
+    }
+  };
+
+  migrateLocalStorage_();
 
   // Iniciar DB no boot (não bloqueia)
   initDB();
