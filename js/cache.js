@@ -61,6 +61,11 @@
     listar_feriados: 'ESTAVEL',
     previsao_anual: 'ESTAVEL',
     comparar_vigencias: 'VOLATIL',
+    // ─── SOS ──────────────────────────────────────────────
+    batch_sos: 'ESTAVEL',
+    resumo_sos_anual: 'ESTAVEL',
+    obter_limites_sos: 'ESTAVEL',
+    obter_historico_sos: 'ESTAVEL',
   };
 
   /**
@@ -69,8 +74,8 @@
    * @type {Object<string, string[]>}
    */
   const INVALIDATION_MAP = {
-    upload_vigencia: ['init_dashboard', 'detalhe_vigencia', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'listar_vigencias', 'obter_relacao_vigencia', 'previsao_anual', 'comparar_vigencias'],
-    remover_vigencia: ['init_dashboard', 'detalhe_vigencia', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'listar_vigencias', 'obter_relacao_vigencia', 'previsao_anual', 'comparar_vigencias'],
+    upload_vigencia: ['init_dashboard', 'detalhe_vigencia', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'listar_vigencias', 'obter_relacao_vigencia', 'previsao_anual', 'comparar_vigencias', 'batch_sos', 'resumo_sos_anual'],
+    remover_vigencia: ['init_dashboard', 'detalhe_vigencia', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'listar_vigencias', 'obter_relacao_vigencia', 'previsao_anual', 'comparar_vigencias', 'batch_sos', 'resumo_sos_anual'],
     salvar_relacao: ['init_dashboard', 'obter_relacao', 'obter_relacao_vigencia', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual'],
     salvar_relacao_datada: ['init_dashboard', 'obter_relacao', 'obter_relacao_vigencia', 'listar_alteracoes', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual'],
     remover_alteracao: ['init_dashboard', 'listar_alteracoes', 'obter_relacao_vigencia', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual'],
@@ -78,6 +83,8 @@
     adicionar_feriado: ['init_dashboard', 'listar_feriados', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual'],
     remover_feriado: ['init_dashboard', 'listar_feriados', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual'],
     criar_ano: ['init_dashboard', 'listar_anos', 'listar_vigencias', 'batch_detalhes'],
+    // ─── SOS escrita ─────────────────────────────────────
+    alterar_limite_sos: ['batch_sos', 'resumo_sos_anual', 'obter_limites_sos', 'obter_historico_sos', 'teto_vigencia', 'detalhe_completo', 'batch_detalhes', 'init_dashboard'],
   };
 
   // ─── Estado ────────────────────────────────────────────────
@@ -108,8 +115,6 @@
           const target = /** @type {IDBOpenDBRequest} */ (e.target);
           const database = target.result;
 
-          // Upgrade de versão: deletar store antigo e recriar para
-          // purgar entradas sem campos SOS (teto_sos, tipo, etc.)
           if (database.objectStoreNames.contains(STORE_NAME)) {
             database.deleteObjectStore(STORE_NAME);
           }
@@ -148,7 +153,6 @@
    */
   const cacheKey = (action, params = {}) => {
     const relevantParams = { ...params };
-    // Remover campos não relevantes para cache
     delete relevantParams.token;
     delete relevantParams.action;
 
@@ -188,8 +192,7 @@
       const request = store.get(key);
 
       request.onsuccess = () => {
-        const result = request.result;
-        resolve(result || null);
+        resolve(request.result || null);
       };
 
       request.onerror = () => { resolve(null); };
@@ -279,7 +282,7 @@
     }
   });
 
-  // ─── Fallback localStorage ────────────────────────────────
+  // ─── localStorage fallback ────────────────────────────────
 
   /**
    * Lê do localStorage (fallback).
@@ -310,7 +313,6 @@
         timestamp: Date.now(),
       }));
     } catch (_) {
-      // Quota exceeded — limpar cache antigo
       lsClearOldest();
       try {
         localStorage.setItem(`mq_${key}`, JSON.stringify({
@@ -371,7 +373,6 @@
 
   /**
    * Verifica se uma vigência (ano/mes) é passada (imutável).
-   * Vigências passadas nunca mudam — cache pode ser efetivamente permanente.
    *
    * @param {Object} params - Parâmetros com ano/mes.
    * @returns {boolean} true se a vigência é passada.
@@ -387,7 +388,6 @@
 
   /**
    * Calcula o TTL efetivo para uma ação+params.
-   * Vigências passadas em ações de detalhe recebem TTL persistente (30d).
    *
    * @param {string} action - Nome da ação.
    * @param {Object} [params={}] - Parâmetros.
@@ -397,7 +397,6 @@
     const baseTtl = getTTL(action);
     if (baseTtl === 0) return 0;
 
-    // Vigências passadas → TTL persistente (30d)
     const detailActions = ['detalhe_completo', 'detalhe_vigencia', 'teto_vigencia'];
     if (detailActions.includes(action) && isVigenciaPassada(params)) {
       return TTL.PERSISTENTE;
@@ -408,8 +407,6 @@
 
   /**
    * Obtém dados do cache.
-   * Retorna { data, stale } onde stale=true indica cache expirado.
-   * Vigências passadas usam TTL persistente (30d) automaticamente.
    *
    * @param {string} action - Nome da ação API.
    * @param {Object} [params={}] - Parâmetros.
@@ -423,10 +420,8 @@
 
     const key = cacheKey(action, params);
 
-    // Tentar IndexedDB primeiro
     let entry = await idbGet(key);
 
-    // Fallback: localStorage
     if (!entry) {
       entry = lsGet(key);
     }
@@ -445,8 +440,7 @@
    * @param {string} action - Nome da ação API.
    * @param {Object} params - Parâmetros.
    * @param {*} data - Dados a armazenar.
-   * @param {number} [overrideTtlMs] - TTL override em ms. Se informado, substitui o TTL padrão da ação.
-   *   Usado pelo Prefetch para aplicar TTL longo (PERSISTENTE) em vigências passadas.
+   * @param {number} [overrideTtlMs] - TTL override em ms.
    * @returns {Promise<void>}
    */
   const set = async (action, params, data, overrideTtlMs) => {
@@ -457,14 +451,12 @@
 
     const key = cacheKey(action, params);
 
-    // Salvar em ambos para redundância
     await idbSet(key, data);
     lsSet(key, data);
   };
 
   /**
    * Invalida cache relacionado a uma ação de escrita.
-   * Chamado automaticamente após operações de mutação.
    *
    * @param {string} action - Ação de escrita que acabou de ocorrer.
    * @returns {Promise<void>}
@@ -491,7 +483,6 @@
   const clearAll = async () => {
     await initDB();
 
-    // Limpar IndexedDB
     if (dbReady && db) {
       try {
         const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -501,7 +492,6 @@
       }
     }
 
-    // Limpar localStorage (somente chaves do app)
     try {
       const keys = [];
       for (let i = 0; i < localStorage.length; i += 1) {
@@ -523,9 +513,6 @@
   const isCacheable = (action) => Boolean(ACTION_TTL[action]);
 
   // ─── Migração de localStorage ─────────────────────────────
-  // Purga entradas stale quando a versão do cache muda.
-  // Necessário porque o localStorage é fallback/backup do IDB
-  // e pode conter dados sem campos SOS (teto_sos, tipo, etc.).
 
   /** @type {string} */
   const LS_VERSION_KEY = 'mq_cache_version';
@@ -534,7 +521,6 @@
     try {
       const storedVersion = Number(localStorage.getItem(LS_VERSION_KEY)) || 0;
       if (storedVersion < DB_VERSION) {
-        // Limpar todas as entradas do app no localStorage
         const keys = [];
         for (let i = 0; i < localStorage.length; i += 1) {
           const k = localStorage.key(i);
@@ -559,9 +545,7 @@
     invalidate,
     clearAll,
     isCacheable,
-    /** Constantes de TTL expostas para o Prefetch usar override explícito */
     TTL,
-    /** Utilitário: verifica se vigência é passada (imutável) */
     isVigenciaPassada,
   };
 })();
