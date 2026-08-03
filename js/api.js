@@ -38,11 +38,17 @@
 
   /**
    * Timeout por tentativa de fetch (ms).
-   * Apps Script tem limite de 30s por execução; 25s dá margem
-   * para o backend completar antes do abort no client.
+   * Apps Script: o ciclo completo é POST→302→GET redirect.
+   * No cold-start cada passo soma latência:
+   *   POST (1-6s) + 302 (0ms) + redirect follow (5-20s) = até 26s.
+   * 45s evita cancelar requests que já consumiram ~20s de
+   * processamento no backend, poupando retry desnecessário.
+   * O backend Apps Script tem limite de 30s por execução; se
+   * ultrapassar, retorna erro 500 naturalmente — não precisamos
+   * cortar antes disso no client.
    * @type {number}
    */
-  const FETCH_TIMEOUT = 25000;
+  const FETCH_TIMEOUT = 45000;
 
   /**
    * Pausa a execução por `ms` milissegundos.
@@ -68,7 +74,9 @@
 
   /**
    * Faz o fetch bruto ao backend (sem cache).
-   * Cada tentativa usa AbortController com timeout de 25s.
+   * Cada tentativa usa AbortController com timeout de 45s
+   * (FETCH_TIMEOUT) para acomodar o ciclo POST→302→redirect
+   * do Apps Script em cold-start.
    *
    * @param {string} action - Nome da ação.
    * @param {Object} [payload={}] - Dados adicionais.
@@ -93,6 +101,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify(body),
+          redirect: 'follow',
           signal: controller.signal,
         });
 
@@ -190,6 +199,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'login', token: idToken }),
+        redirect: 'follow',
         signal: controller.signal,
       });
 
