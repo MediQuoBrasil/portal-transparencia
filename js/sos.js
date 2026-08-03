@@ -62,6 +62,36 @@
     'Maio', 'Junho', 'Julho', 'Agosto',
     'Setembro', 'Outubro', 'Novembro', 'Dezembro',
   ];
+
+  // ─── Helpers ──────────────────────────────────────────────
+
+  /**
+   * Formata uma string de data (vinda do backend) em "DD/MM/YYYY HH:MM".
+   * Aceita formatos:
+   *  - Date.toString() do GAS: "Mon Aug 31 2026 08:00:00 GMT-0300 ..."
+   *  - ISO 8601: "2026-08-31T08:00:00.000Z"
+   *  - Já formatada DD/MM/YYYY...: retorna como está (truncada em 16 chars)
+   *
+   * @param {string} raw - String de data bruta.
+   * @returns {string} Data formatada "DD/MM/YYYY HH:MM" ou string original se inválida.
+   * @private
+   */
+  const formatarDataHora_ = (raw) => {
+    if (!raw) return '';
+    const str = String(raw).trim();
+
+    // Se já está no formato DD/MM/YYYY, retorna truncado a 16 chars (DD/MM/YYYY HH:MM)
+    if (/^\d{2}\/\d{2}\/\d{4}/.test(str)) {
+      return str.substring(0, 16);
+    }
+
+    // Tentar parse como Date (cobre ISO e Date.toString())
+    const d = new Date(str);
+    if (isNaN(d.getTime())) return str;
+
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
  
   // ─── Render principal ────────────────────────────────────
  
@@ -323,7 +353,7 @@
   };
  
   /**
-   * Renderiza o conteúdo completo (resumo + limites + histórico).
+   * Renderiza o conteúdo completo (resumo → histórico → limites).
    *
    * @param {HTMLElement} container - Container alvo.
    */
@@ -335,8 +365,8 @@
  
     container.innerHTML = `
       ${renderResumoAnual()}
-      ${isAdmin ? renderLimitesEditor() : ''}
       ${renderHistorico()}
+      ${isAdmin ? renderLimitesEditor() : ''}
     `;
  
     bindFiltros();
@@ -705,8 +735,8 @@
       totalHoras += horas;
       totalValor += pl.valor;
  
-      const inicioFmt = String(pl.inicio || '').substring(0, 16);
-      const fimFmt = String(pl.fim || '').substring(0, 16);
+      const inicioFmt = formatarDataHora_(pl.inicio);
+      const fimFmt = formatarDataHora_(pl.fim);
  
       return `
         <tr>
