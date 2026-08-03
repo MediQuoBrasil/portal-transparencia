@@ -160,8 +160,8 @@
 
   /**
    * Aciona o Google One Tap (mini popup no canto superior direito).
-   * Se o One Tap estiver indisponível, renderiza o botão oficial do Google
-   * como fallback no container dedicado.
+   * Se o One Tap estiver indisponível OU for dispensado (cooldown
+   * do FedCM), renderiza o botão oficial do Google como fallback.
    */
   const triggerGoogleSignIn = () => {
     if (!window.google || !window.google.accounts || !window.google.accounts.id) {
@@ -169,15 +169,27 @@
       return;
     }
 
-    window.google.accounts.id.prompt((notification) => {
-      if (notification.isNotDisplayed()) {
-        console.log('[Auth] One Tap indisponível:', notification.getNotDisplayedReason());
-        renderGoogleFallback();
-      }
-      if (notification.isSkippedMoment()) {
-        console.log('[Auth] One Tap dispensado:', notification.getSkippedReason());
-      }
-    });
+    try {
+      window.google.accounts.id.prompt((notification) => {
+        if (notification.isNotDisplayed()) {
+          console.log('[Auth] One Tap indisponível:', notification.getNotDisplayedReason());
+          renderGoogleFallback();
+        }
+        if (notification.isSkippedMoment()) {
+          console.log('[Auth] One Tap dispensado:', notification.getSkippedReason());
+          // FedCM entra em cooldown após dismissal (tap_outside,
+          // user_cancel, etc). Chamadas subsequentes a prompt()
+          // são silenciosamente bloqueadas. Renderizar o botão
+          // oficial do Google para que o login continue possível.
+          renderGoogleFallback();
+        }
+      });
+    } catch (err) {
+      // FedCM pode lançar AbortError quando o navegador bloqueia
+      // a chamada (cooldown, restrição de contexto, etc).
+      console.warn('[Auth] prompt() falhou:', err.message);
+      renderGoogleFallback();
+    }
   };
 
   /**
