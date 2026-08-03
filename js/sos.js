@@ -15,12 +15,12 @@
  *  - window.Utils    (formatarMoeda, escapeHtml)
  *  - window.Auth     (getSession)
  */
-
+ 
 (function () {
   'use strict';
-
+ 
   // ─── Typedefs ──────────────────────────────────────────────
-
+ 
   /**
    * @typedef {Object} SosState
    * @property {number[]}  anos        - Anos disponíveis
@@ -31,7 +31,7 @@
    * @property {string}    filtro      - 'cronologico' | 'maior_carga'
    * @property {number|null} vigenciaAberta - Índice do mês expandido (0–11)
    */
-
+ 
   /** @type {SosState} */
   const state = {
     anos: [],
@@ -42,18 +42,18 @@
     filtro: 'cronologico',
     vigenciaAberta: null,
   };
-
+ 
   // ─── Constantes ──────────────────────────────────────────
-
+ 
   /** @type {string[]} */
   const MESES_PT = [
     'Janeiro', 'Fevereiro', 'Março', 'Abril',
     'Maio', 'Junho', 'Julho', 'Agosto',
     'Setembro', 'Outubro', 'Novembro', 'Dezembro',
   ];
-
+ 
   // ─── Render principal ────────────────────────────────────
-
+ 
   /**
    * Ponto de entrada: renderiza a página SOS completa.
    *
@@ -64,18 +64,18 @@
     state.anos = anos;
     state.anoAtivo = state.anoAtivo || (anos.length > 0 ? anos[anos.length - 1] : new Date().getFullYear());
     state.vigenciaAberta = null;
-
+ 
     const mainBody = document.getElementById('mainBody');
     if (!mainBody) return;
-
+ 
     const mainTitle = document.getElementById('mainHeaderTitle');
     const mainSubtitle = document.getElementById('mainHeaderSubtitle');
     if (mainTitle) mainTitle.textContent = 'SOS — Banco de Horas Emergencial';
     if (mainSubtitle) mainSubtitle.textContent = '';
-
+ 
     mainBody.innerHTML = renderPage();
     bindYearSelector();
-
+ 
     try {
       await carregarDados();
     } catch (err) {
@@ -86,7 +86,7 @@
       }
     }
   };
-
+ 
   /**
    * Renderiza o esqueleto da página.
    *
@@ -96,7 +96,7 @@
     const yearOptions = state.anos
       .map((a) => `<option value="${a}"${a === state.anoAtivo ? ' selected' : ''}>${a}</option>`)
       .join('');
-
+ 
     return `
       <div class="sos-page">
         <div class="sos-toolbar">
@@ -114,7 +114,7 @@
             <select class="sos-year-select" id="sosYearSelect">${yearOptions}</select>
           </div>
         </div>
-
+ 
         <div id="sosContent">
           <div class="sos-loading">
             <span class="spinner"></span> Carregando dados SOS...
@@ -123,9 +123,9 @@
       </div>
     `;
   };
-
+ 
   // ─── Carregamento de dados ────────────────────────────────
-
+ 
   /**
    * Carrega resumo, limites e histórico em paralelo.
    *
@@ -134,12 +134,12 @@
   const carregarDados = async () => {
     const container = document.getElementById('sosContent');
     if (!container) return;
-
+ 
     container.innerHTML = '<div class="sos-loading"><span class="spinner"></span> Carregando dados SOS...</div>';
-
+ 
     /** @type {Array<{ok: boolean, data?: *, error?: string}>} */
     let results;
-
+ 
     try {
       results = await Promise.all([
         window.Api.request('resumo_sos_anual', { ano: state.anoAtivo }),
@@ -151,19 +151,19 @@
       container.innerHTML = '<div class="sos-error">Erro de comunicação ao carregar dados SOS.</div>';
       return;
     }
-
+ 
     const [resumoRes, limitesRes, historicoRes] = results;
-
+ 
     if (!resumoRes || !resumoRes.ok) {
       const msg = (resumoRes && resumoRes.error) || 'Erro ao carregar resumo SOS.';
       container.innerHTML = `<div class="sos-error">${window.Utils.escapeHtml(msg)}</div>`;
       return;
     }
-
+ 
     state.resumo = resumoRes.data;
     state.limites = (limitesRes && limitesRes.ok) ? limitesRes.data : null;
     state.historico = (historicoRes && historicoRes.ok) ? historicoRes.data : null;
-
+ 
     try {
       renderContent(container);
     } catch (err) {
@@ -171,7 +171,7 @@
       container.innerHTML = '<div class="sos-error">Erro ao renderizar dados SOS. Verifique o console.</div>';
     }
   };
-
+ 
   /**
    * Renderiza o conteúdo completo (resumo + limites + histórico).
    *
@@ -179,25 +179,24 @@
    */
   const renderContent = (container) => {
     if (!container || !state.resumo) return;
-
+ 
     const session = window.Auth.getSession();
     const isAdmin = session?.role === 'admin';
-
+ 
     container.innerHTML = `
       ${renderResumoAnual()}
-      ${renderFiltros()}
       <div id="sosDetalheContainer"></div>
       ${isAdmin ? renderLimitesEditor() : ''}
       ${renderHistorico()}
     `;
-
+ 
     bindFiltros();
     bindResumoToggle();
     bindLimitesEvents();
   };
-
+ 
   // ─── Resumo Anual ─────────────────────────────────────────
-
+ 
   /**
    * Renderiza a tabela de resumo anual SOS.
    *
@@ -205,22 +204,22 @@
    */
   const renderResumoAnual = () => {
     if (!state.resumo) return '';
-
+ 
     const { meses } = state.resumo;
-
+ 
     // Aplicar filtro
     let sorted = [...meses];
     if (state.filtro === 'maior_carga') {
       sorted.sort((a, b) => b.realizado_horas - a.realizado_horas);
     }
-
+ 
     const rowsHtml = sorted.map((m, idx) => {
       const pctStr = m.limite_horas > 0
         ? `${m.percentual.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
         : '—';
       const hasData = m.realizado_horas > 0;
       const rowClass = hasData ? 'sos-resumo-row sos-resumo-row--active' : 'sos-resumo-row';
-
+ 
       return `
         <tr class="${rowClass}" data-sos-mes="${m.mes}" data-sos-idx="${idx}">
           <td class="sos-resumo-nome">
@@ -233,12 +232,22 @@
         </tr>
       `;
     }).join('');
-
+ 
     return `
       <div class="card sos-resumo-card">
         <div class="sos-card-header">
           <span class="sos-card-title">Resumo Anual</span>
-          <span class="sos-card-badge">${state.anoAtivo}</span>
+          <div class="sos-card-header-right">
+            <div class="sos-filtros">
+              <button type="button" class="sos-filtro-btn${state.filtro === 'cronologico' ? ' active' : ''}" data-sos-filtro="cronologico">
+                Sequência do ano
+              </button>
+              <button type="button" class="sos-filtro-btn${state.filtro === 'maior_carga' ? ' active' : ''}" data-sos-filtro="maior_carga">
+                Maior carga
+              </button>
+            </div>
+            <span class="sos-card-badge">${state.anoAtivo}</span>
+          </div>
         </div>
         <table class="sos-resumo-table">
           <thead>
@@ -254,27 +263,9 @@
       </div>
     `;
   };
-
-  // ─── Filtros ──────────────────────────────────────────────
-
-  /**
-   * Renderiza botões de filtro.
-   *
-   * @returns {string} HTML.
-   */
-  const renderFiltros = () => `
-    <div class="sos-filtros">
-      <button type="button" class="sos-filtro-btn${state.filtro === 'cronologico' ? ' active' : ''}" data-sos-filtro="cronologico">
-        Sequência do ano
-      </button>
-      <button type="button" class="sos-filtro-btn${state.filtro === 'maior_carga' ? ' active' : ''}" data-sos-filtro="maior_carga">
-        Maior carga
-      </button>
-    </div>
-  `;
-
+ 
   // ─── Editor de limites (admin) ────────────────────────────
-
+ 
   /**
    * Renderiza a seção de edição de limites.
    * Visível apenas para admins.
@@ -283,9 +274,9 @@
    */
   const renderLimitesEditor = () => {
     if (!state.limites) return '';
-
+ 
     const { meses } = state.limites;
-
+ 
     const rowsHtml = meses.map((m) => `
       <tr class="sos-lim-row" data-lim-mes="${m.mes}">
         <td>${window.Utils.escapeHtml(m.nome)}</td>
@@ -303,7 +294,7 @@
         </td>
       </tr>
     `).join('');
-
+ 
     return `
       <div class="card sos-lim-card">
         <div class="sos-card-header">
@@ -330,9 +321,9 @@
       </div>
     `;
   };
-
+ 
   // ─── Histórico ────────────────────────────────────────────
-
+ 
   /**
    * Renderiza o histórico de alterações de limites SOS.
    * Mesmo padrão de timeline de js_teto.js:renderHistoricoAlteracoes.
@@ -344,20 +335,20 @@
       ? state.historico.historico
       : [];
     if (historicoArr.length === 0) return '';
-
+ 
     const entries = historicoArr;
-
+ 
     const timelineHtml = entries.map((h) => {
       const mesNum = parseInt(h.vigencia_id.split('-')[1], 10);
       const mesNome = MESES_PT[mesNum - 1] || h.vigencia_id;
-
+ 
       const dataFmt = h.alterado_em
         ? new Date(h.alterado_em).toLocaleDateString('pt-BR', {
           day: '2-digit', month: '2-digit', year: 'numeric',
           hour: '2-digit', minute: '2-digit',
         })
         : '';
-
+ 
       return `
         <div class="hist-entry">
           <div class="hist-entry-marker">
@@ -381,7 +372,7 @@
         </div>
       `;
     }).join('');
-
+ 
     return `
       <div class="card hist-card">
         <div class="hist-card-header">
@@ -400,9 +391,9 @@
       </div>
     `;
   };
-
+ 
   // ─── Event Binding ────────────────────────────────────────
-
+ 
   /**
    * Vincula eventos do seletor de ano.
    */
@@ -415,7 +406,7 @@
       carregarDados();
     });
   };
-
+ 
   /**
    * Vincula eventos dos filtros de ordenação.
    */
@@ -429,7 +420,7 @@
       });
     });
   };
-
+ 
   /**
    * Vincula expand/collapse nas linhas do resumo anual.
    */
@@ -437,7 +428,7 @@
     document.querySelectorAll('.sos-resumo-row--active').forEach((row) => {
       row.addEventListener('click', async () => {
         const mes = Number(row.dataset.sosMes);
-
+ 
         if (state.vigenciaAberta === mes) {
           state.vigenciaAberta = null;
           document.querySelectorAll('.sos-resumo-row').forEach((r) => r.classList.remove('expanded'));
@@ -445,16 +436,16 @@
           if (detalheContainer) detalheContainer.innerHTML = '';
           return;
         }
-
+ 
         state.vigenciaAberta = mes;
         document.querySelectorAll('.sos-resumo-row').forEach((r) => r.classList.remove('expanded'));
         row.classList.add('expanded');
-
+ 
         await carregarDetalheVigencia(mes);
       });
     });
   };
-
+ 
   /**
    * Vincula eventos nos botões de salvar limite.
    */
@@ -464,31 +455,31 @@
         const mes = Number(btn.dataset.limMes);
         const input = document.getElementById(`sosLimInput_${mes}`);
         if (!input) return;
-
+ 
         const novoLimite = Number(input.value);
-
+ 
         if (isNaN(novoLimite) || novoLimite < 0 || novoLimite > 744) {
           window.UI.showToast('Limite inválido (0–744h).', 'error');
           return;
         }
-
+ 
         btn.disabled = true;
         btn.textContent = '...';
-
+ 
         const result = await window.Api.request('alterar_limite_sos', {
           ano: state.anoAtivo,
           mes,
           limite_horas: novoLimite,
         });
-
+ 
         btn.disabled = false;
         btn.textContent = 'Salvar';
-
+ 
         if (!result.ok) {
           window.UI.showToast(result.error || 'Erro ao salvar limite.', 'error');
           return;
         }
-
+ 
         if (result.data.alterado) {
           window.UI.showToast(`Limite de ${MESES_PT[mes - 1]} atualizado para ${novoLimite}h.`, 'success');
           btn.dataset.limOriginal = String(novoLimite);
@@ -499,9 +490,9 @@
       });
     });
   };
-
+ 
   // ─── Detalhe por vigência ─────────────────────────────────
-
+ 
   /**
    * Carrega e renderiza o detalhe de plantões SOS de uma vigência.
    *
@@ -511,14 +502,14 @@
   const carregarDetalheVigencia = async (mes) => {
     const container = document.getElementById('sosDetalheContainer');
     if (!container) return;
-
+ 
     container.innerHTML = '<div class="sos-loading"><span class="spinner"></span> Carregando detalhe...</div>';
-
+ 
     const result = await window.Api.request('detalhe_vigencia', {
       ano: state.anoAtivo,
       mes,
     });
-
+ 
     if (!result.ok || !result.data.temDados) {
       container.innerHTML = `
         <div class="card sos-detalhe-card">
@@ -530,13 +521,13 @@
       `;
       return;
     }
-
+ 
     const registros = result.data.registros || [];
     const sosPl = registros.filter((r) => {
       const tipo = String(r.tipo || '').trim().toUpperCase();
       return tipo === 'SOS';
     });
-
+ 
     if (sosPl.length === 0) {
       container.innerHTML = `
         <div class="card sos-detalhe-card">
@@ -548,11 +539,11 @@
       `;
       return;
     }
-
+ 
     // Agregar por profissional
     let totalHoras = 0;
     let totalValor = 0;
-
+ 
     const rowsHtml = sosPl.map((pl) => {
       const duracaoStr = String(pl.duracao_h || '').trim();
       const timeMatch = duracaoStr.match(/^(\d{1,3}):(\d{2})$/);
@@ -561,10 +552,10 @@
         : 0;
       totalHoras += horas;
       totalValor += pl.valor;
-
+ 
       const inicioFmt = String(pl.inicio || '').substring(0, 16);
       const fimFmt = String(pl.fim || '').substring(0, 16);
-
+ 
       return `
         <tr>
           <td>${window.Utils.escapeHtml(pl.profissional)}</td>
@@ -575,9 +566,9 @@
         </tr>
       `;
     }).join('');
-
+ 
     const totalHorasFmt = `${Math.floor(totalHoras)}h${Math.round((totalHoras % 1) * 60) > 0 ? `${Math.round((totalHoras % 1) * 60).toString().padStart(2, '0')}min` : ''}`;
-
+ 
     container.innerHTML = `
       <div class="card sos-detalhe-card">
         <div class="sos-card-header">
@@ -606,8 +597,8 @@
       </div>
     `;
   };
-
+ 
   // ─── API pública ──────────────────────────────────────────
-
+ 
   window.Sos = { render };
 })();
