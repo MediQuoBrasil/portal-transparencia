@@ -304,9 +304,21 @@
         return;
       }
  
-      // ── Fallback: 3 chamadas individuais ──
-      console.warn('[SOS] batch_sos falhou, fallback para chamadas individuais');
-      await carregarDadosIndividual_(container);
+      // ── Fallback restrito ──
+      // Só recorre às 3 chamadas individuais se o batch_sos estiver
+      // genuinamente ausente do deploy (404 = ação não reconhecida).
+      // Para timeout/5xx/rede NÃO disparamos 3 chamadas paralelas:
+      // isso apenas multiplicaria a carga sobre um backend já lento,
+      // agravando o throttling. Nesses casos, exibimos erro e deixamos
+      // o usuário reagir (o retry do Api já cobre falhas transitórias).
+      if (batchResult.code === 404) {
+        console.warn('[SOS] batch_sos ausente (deploy antigo), usando endpoints individuais');
+        await carregarDadosIndividual_(container);
+        return;
+      }
+
+      const msg = batchResult.error || 'Erro ao carregar dados SOS. Tente novamente.';
+      container.innerHTML = `<div class="sos-error">${window.Utils.escapeHtml(msg)}</div>`;
     } catch (err) {
       console.error('[SOS] Erro nas chamadas API:', err);
       container.innerHTML = '<div class="sos-error">Erro de comunicação ao carregar dados SOS.</div>';
