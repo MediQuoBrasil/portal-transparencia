@@ -1376,10 +1376,16 @@
         });
       }
 
-      // Disparar prefetch de TODAS as vigências do ano em background
-      // Após render, carrega dados restantes para acesso instantâneo
+      // Disparar prefetch de TODAS as vigências do ano em background.
+      // Fase A: passa antes por check_update — se nada mudou no servidor
+      // desde o último acesso, o cache IndexedDB é usado intacto e
+      // nenhuma leitura de planilha é feita.
       if (window.Prefetch) {
-        window.Prefetch.startBackground(ano, anos);
+        if (window.Prefetch.startBackgroundIfUnchanged) {
+          window.Prefetch.startBackgroundIfUnchanged(ano, anos);
+        } else {
+          window.Prefetch.startBackground(ano, anos);
+        }
       }
       return;
     }
