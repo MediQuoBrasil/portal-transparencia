@@ -51,6 +51,38 @@
   const FETCH_TIMEOUT = 45000;
 
   /**
+   * Retries no login. 1 = no máximo 2 tentativas. Login é o gargalo do
+   * 1º acesso: cada tentativa extra enfileira execução no backend
+   * single-threaded, piorando o throttling. Em falha transitória real o
+   * usuário reclica — aceitável frente a eliminar a cauda de 30–60 s.
+   * @type {number}
+   */
+  const LOGIN_MAX_RETRIES = 1;
+
+  /**
+   * Timeout da 1ª tentativa de login (ms). Curto: falha rápido em
+   * cold-start sem pendurar o usuário. O backend segue processando após o
+   * abort (Apps Script não cancela no disconnect), então a 2ª tentativa
+   * costuma achar o runtime já aquecendo.
+   * @type {number}
+   */
+  const LOGIN_TIMEOUT_FIRST = 10000;
+
+  /**
+   * Timeout da 2ª tentativa de login (ms). Mais folgado: o cold-start já
+   * passou; dá tempo de completar sem cortar cedo.
+   * @type {number}
+   */
+  const LOGIN_TIMEOUT_RETRY = 20000;
+
+  /**
+   * Backoff entre tentativas de login (ms). Pequeno e fixo: backoff só
+   * ajuda quando o backend NÃO está saturado — aqui, menos é mais.
+   * @type {number}
+   */
+  const LOGIN_RETRY_DELAY = 800;
+
+  /**
    * Pausa a execução por `ms` milissegundos.
    * @param {number} ms - Duração em milissegundos.
    * @returns {Promise<void>}
@@ -364,14 +396,16 @@
 
   /**
    * Envia requisição de login (sem token pré-existente).
-   * Usa retry com backoff para resistir a cold-starts e falhas
-   * transitórias do Apps Script.
    *
-   * Diferenças em relação ao fetchFromNetwork:
-   * - Retry em TODO erro não-permanente (inclusive 404 transitório
-   *   do echo URL do Google, que pode ser infraestrutura e não deploy).
-   * - Só aborta retry cedo se o body for uma página de auth Google
-   *   (code 403), que exige ação manual e não resolve com retry.
+   * Estratégia domada (T0‑C): no máximo LOGIN_MAX_RETRIES retry, timeout
+   * progressivo (LOGIN_TIMEOUT_FIRST → LOGIN_TIMEOUT_RETRY) e backoff
+   * curto (LOGIN_RETRY_DELAY). O `await` é sequencial: cada tentativa só
+   * dispara depois que a anterior foi abortada e liquidada — nunca há dois
+   * fetches de login em voo, evitando enfileirar execução redundante no
+   * backend single-threaded.
+   *
+   * - 403 (auth wall do Google): não vale retry, exige ação manual.
+   * - 5xx/404 (echo URL transitório): 1 retry, depois desiste.
    *
    * @param {string} idToken - JWT do Google Identity Services.
    * @returns {Promise<ApiResult>}
@@ -384,7 +418,11 @@
 
     console.log('[API][login] Iniciando login. URL:', window.AppConfig.API_URL.slice(0, 80));
 
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+    for (let attempt = 0; attempt <= LOGIN_MAX_RETRIES; attempt += 1) {
+      // Timeout progressivo: 1ª curta (falha rápido em cold-start),
+      // retry mais folgado (cold-start já passou).
+      const timeout = attempt === 0 ? LOGIN_TIMEOUT_FIRST : LOGIN_TIMEOUT_RETRY;
+
       /** @type {AbortController|null} */
       let controller = null;
       /** @type {number|null} */
@@ -392,7 +430,9 @@
 
       try {
         controller = new AbortController();
-        timeoutId = setTimeout(() => { controller.abort(); }, FETCH_TIMEOUT);
+        // await sequencial: a tentativa anterior já foi abortada e
+        // liquidada antes desta — nunca há dois fetches de login em voo.
+        timeoutId = setTimeout(() => { controller.abort(); }, timeout);
 
         const t0 = Date.now();
         const response = await fetch(window.AppConfig.API_URL, {
@@ -406,7 +446,7 @@
         clearTimeout(timeoutId);
         const elapsed = Date.now() - t0;
 
-        console.log(`[API][login] Fetch completou em ${elapsed}ms. ` +
+        console.log(`[API][login] Fetch completou em ${elapsed}ms (timeout ${timeout}ms). ` +
           `Status: ${response.status}, Redirected: ${response.redirected}, ` +
           `URL final: ${(response.url || '').slice(0, 100)}`);
 
@@ -447,10 +487,9 @@
         });
       }
 
-      if (attempt < MAX_RETRIES) {
-        const delay = RETRY_DELAY * (attempt + 1);
-        console.log(`[API][login] Aguardando ${delay}ms antes do retry...`);
-        await wait(delay);
+      if (attempt < LOGIN_MAX_RETRIES) {
+        console.log(`[API][login] Aguardando ${LOGIN_RETRY_DELAY}ms antes do retry...`);
+        await wait(LOGIN_RETRY_DELAY);
       }
     }
 
