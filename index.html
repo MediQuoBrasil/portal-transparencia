@@ -6,6 +6,12 @@
   <meta name="robots" content="noindex, nofollow">
   <title>Portal da Transparência — Saúde MediQuo</title>
 
+  <!-- Apps Script API — pré-conecta os dois hops do ciclo POST→302→redirect.
+       O 2º hop (googleusercontent.com) tem DNS+TLS próprios; sem preconnect,
+       paga-se esse handshake no meio do login (−150–350 ms no 1º login). -->
+  <link rel="preconnect" href="https://script.google.com" crossorigin>
+  <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+
   <!-- Fonts — Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
