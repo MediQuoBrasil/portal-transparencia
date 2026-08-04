@@ -516,6 +516,54 @@
   };
 
   /**
+   * Gate da Fase A: antes de disparar o prefetch pesado, consulta
+   * `check_update`. Se nada mudou no servidor desde o último acesso,
+   * o cache IndexedDB é usado intacto (nenhuma leitura de planilha) e o
+   * prefetch é ignorado. Caso contrário (ou se não for possível
+   * confirmar), roda o prefetch normal e atualiza o `since` local.
+   *
+   * Fire-and-forget: chamado após o primeiro render, não bloqueia a UI.
+   *
+   * @param {number} anoAtivo - Ano atualmente selecionado.
+   * @param {number[]} anosDisponiveis - Lista de todos os anos.
+   * @returns {Promise<void>}
+   */
+  const startBackgroundIfUnchanged = async (anoAtivo, anosDisponiveis) => {
+    const cache = window.Cache;
+
+    // Sem infra necessária (deploy antigo / cache indisponível) →
+    // comportamento anterior: sempre prefetch.
+    if (!cache || !cache.getSince || !cache.setAllFresh
+      || !window.Api || !window.Api.checkUpdate) {
+      startBackground(anoAtivo, anosDisponiveis);
+      return;
+    }
+
+    /** @type {{changed: boolean, ultima_escrita: number}} */
+    let result;
+    try {
+      const since = await cache.getSince();
+      result = await window.Api.checkUpdate(since);
+    } catch (_) {
+      result = { changed: true, ultima_escrita: 0 };
+    }
+
+    if (result && result.changed === false) {
+      // Nada mudou → servir tudo do IndexedDB, sem tocar o Apps Script.
+      cache.setAllFresh(true);
+      if (result.ultima_escrita > 0) cache.setSince(result.ultima_escrita);
+      console.log('[Prefetch] check_update: sem mudanças — cache local intacto, prefetch pesado ignorado.');
+      return;
+    }
+
+    // Houve escrita (ou não foi possível confirmar) → prefetch normal e
+    // sincronizar o marcador local para o valor atual do servidor.
+    cache.setAllFresh(false);
+    if (result && result.ultima_escrita > 0) cache.setSince(result.ultima_escrita);
+    startBackground(anoAtivo, anosDisponiveis);
+  };
+
+  /**
    * Processa a fila de prefetch. O primeiro item roda imediatamente
    * quando `immediate` é true; os demais via requestIdleCallback.
    *
@@ -681,6 +729,7 @@
     /** @deprecated Mantido por compatibilidade — earlyPreLoginFetch substitui */
     earlyWarmup: earlyPreLoginFetch,
     startBackground,
+    startBackgroundIfUnchanged,
     prefetchAno,
     loadVigencia,
     getPreLoginData,
