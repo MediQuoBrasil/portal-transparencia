@@ -465,6 +465,14 @@
         // Api.request cacheia sozinho → troca de ano sem loading.
         window.Api.request('listar_vigencias', { ano });
 
+        // Aquecer também os datasets das abas de ANÁLISE (SOS e Previsão)
+        // no IndexedDB. Sem isto, o 1º clique nessas abas é sempre cache
+        // MISS → rede (allFresh não cria dado inexistente). Api.request
+        // cacheia sozinho → em dia sem mudança, abrir SOS/Previsão serve
+        // tudo do cache local, sem tocar o Apps Script.
+        window.Api.request('batch_sos', { ano });
+        window.Api.request('previsao_anual', { ano });
+
         return true;
       } catch (err) {
         console.warn('[Prefetch] Erro no prefetch do ano', ano, err);
