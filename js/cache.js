@@ -29,6 +29,15 @@
   const STORE_NAME = 'api_cache';
 
   /**
+   * Chave reservada (fora do namespace de ações) para persistir o
+   * último `ultima_escrita` visto do servidor (Fase A). Não colide com
+   * chaves de ação nem é afetada por invalidação por prefixo; é limpa
+   * junto com o cache em clearAll.
+   * @type {string}
+   */
+  const META_SINCE_KEY = '__meta_since__';
+
+  /**
    * TTLs em milissegundos por tipo de dado.
    * @type {Object<string, number>}
    */
@@ -97,6 +106,17 @@
 
   /** @type {Promise<void>|null} */
   let dbInitPromise = null;
+
+  /**
+   * Quando true, entradas JÁ presentes no cache são consideradas
+   * frescas independentemente da idade — ativado após check_update
+   * confirmar que nada mudou no servidor desde o último acesso (Fase A).
+   * Suprime a revalidação em background, fazendo as leituras mirarem o
+   * IndexedDB em vez do Apps Script. Não afeta cache miss (dados
+   * ausentes ainda são buscados na rede sob demanda).
+   * @type {boolean}
+   */
+  let allFresh = false;
 
   // ─── IndexedDB setup ──────────────────────────────────────
 
@@ -429,7 +449,10 @@
     if (!entry || !entry.data) return null;
 
     const age = Date.now() - entry.timestamp;
-    const stale = age > ttl;
+    // allFresh: check_update confirmou que nada mudou no servidor →
+    // tratar a entrada existente como fresca, evitando revalidação
+    // desnecessária contra o Apps Script.
+    const stale = allFresh ? false : age > ttl;
 
     return { data: entry.data, stale };
   };
@@ -464,6 +487,12 @@
   const invalidate = async (action) => {
     const prefixes = INVALIDATION_MAP[action];
     if (!prefixes) return;
+
+    // Uma escrita ocorreu: desligar o modo "tudo fresco". As chaves
+    // afetadas são removidas abaixo (viram cache miss → rede), e as
+    // sobreviventes voltam a revalidar normalmente — rede de segurança
+    // caso o mapa de invalidação não cubra algum efeito colateral.
+    allFresh = false;
 
     await initDB();
 
@@ -512,6 +541,48 @@
    */
   const isCacheable = (action) => Boolean(ACTION_TTL[action]);
 
+  // ─── Fase A: sinal global de mudança ──────────────────────
+
+  /**
+   * Ativa/desativa o modo "tudo fresco". Quando ativo, entradas já
+   * presentes no cache não disparam revalidação — usado após
+   * check_update retornar changed:false para servir tudo do IndexedDB.
+   *
+   * @param {boolean} value - true para suprimir revalidação.
+   */
+  const setAllFresh = (value) => {
+    allFresh = Boolean(value);
+  };
+
+  /**
+   * Lê o último `ultima_escrita` visto do servidor.
+   * Leitura crua (sem TTL) do IDB, com fallback para localStorage.
+   *
+   * @returns {Promise<number>} Epoch ms, ou 0 se nunca gravado.
+   */
+  const getSince = async () => {
+    await initDB();
+    let entry = await idbGet(META_SINCE_KEY);
+    if (!entry) entry = lsGet(META_SINCE_KEY);
+    const v = Number(entry && entry.data);
+    return Number.isFinite(v) && v > 0 ? v : 0;
+  };
+
+  /**
+   * Persiste o último `ultima_escrita` visto do servidor.
+   * Grava no IDB e no localStorage (espelho de resiliência).
+   *
+   * @param {number} value - Epoch ms retornado por check_update.
+   * @returns {Promise<void>}
+   */
+  const setSince = async (value) => {
+    const v = Number(value);
+    if (!Number.isFinite(v) || v <= 0) return;
+    await initDB();
+    await idbSet(META_SINCE_KEY, v);
+    lsSet(META_SINCE_KEY, v);
+  };
+
   // ─── Migração de localStorage ─────────────────────────────
 
   /** @type {string} */
@@ -547,5 +618,9 @@
     isCacheable,
     TTL,
     isVigenciaPassada,
+    // ─── Fase A ───
+    setAllFresh,
+    getSince,
+    setSince,
   };
 })();
