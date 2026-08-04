@@ -558,6 +558,319 @@
     `;
   };
 
+  // ─── Comparação client-side (espelho fiel do backend) ──────
+  //
+  //  Estes helpers são a portabilidade 1:1 de comparacao.gs. Operam
+  //  exclusivamente sobre os objetos de indicadores (saída de
+  //  montarIndicadores_) que o bootstrap já semeou em
+  //  `indicadores_vigencia`. Como os cálculos são determinísticos
+  //  (aritmética e concatenação de strings), o resultado é idêntico
+  //  ao de `comparar_vigencias` — permitindo comparar em memória, sem
+  //  tocar o Apps Script. Manter em sincronia com o backend.
+
+  /** @type {number} Valor da hora (espelha VALOR_HORA do backend). */
+  const VALOR_HORA = 100;
+
+  /** @type {string[]} Ordem canônica dos dias (espelha DIAS_SEMANA do backend). */
+  const DIAS_SEMANA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+
+  /**
+   * Calcula a variação entre dois valores.
+   * @param {string} campo
+   * @param {number} valorA
+   * @param {number} valorB
+   * @returns {Object}
+   */
+  const calcularVariacao_ = (campo, valorA, valorB) => {
+    const delta = valorB - valorA;
+    const deltaPct = valorA !== 0
+      ? Math.round(((delta / Math.abs(valorA)) * 100) * 100) / 100
+      : 0;
+
+    let direcao = 'equal';
+    if (delta > 0) direcao = 'up';
+    if (delta < 0) direcao = 'down';
+
+    return { campo, valor_a: valorA, valor_b: valorB, delta, delta_pct: deltaPct, direcao };
+  };
+
+  /**
+   * Detecta alterações na relação de plantões entre duas vigências.
+   * @param {Object} a
+   * @param {Object} b
+   * @returns {Object[]}
+   */
+  const detectarAlteracoesRelacao_ = (a, b) => {
+    const alteracoes = [];
+    const horasA = a.horas_diarias_relacao || {};
+    const horasB = b.horas_diarias_relacao || {};
+
+    DIAS_SEMANA.forEach((dia) => {
+      const hA = horasA[dia] || 0;
+      const hB = horasB[dia] || 0;
+      if (hA !== hB) {
+        alteracoes.push({
+          dia_semana: dia, horas_antes: hA,
+          horas_depois: hB, diferenca_horas: hB - hA,
+        });
+      }
+    });
+
+    return alteracoes;
+  };
+
+  /**
+   * Formata valor em reais para texto (espelha fmtMoeda_ do backend).
+   * @param {number} valor
+   * @returns {string}
+   */
+  const fmtMoeda_ = (valor) => {
+    const abs = Math.abs(valor);
+    const parts = abs.toFixed(2).split('.');
+    const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    return 'R$ ' + (valor < 0 ? '-' : '') + intPart + ',' + parts[1];
+  };
+
+  /**
+   * Capitaliza a primeira letra.
+   * @param {string} str
+   * @returns {string}
+   */
+  const capitalizar_ = (str) => (str ? str.charAt(0).toUpperCase() + str.slice(1) : '');
+
+  /**
+   * Gera justificativas automáticas (itens).
+   * @param {Object} a
+   * @param {Object} b
+   * @returns {Object[]}
+   */
+  const gerarJustificativas_ = (a, b) => {
+    const justificativas = [];
+
+    DIAS_SEMANA.forEach((dia) => {
+      const diffDias = (b.composicao[dia] || 0) - (a.composicao[dia] || 0);
+      if (diffDias !== 0) {
+        const horasMediaDia = b.horas_por_dia[dia] > 0 && b.composicao[dia] > 0
+          ? b.horas_por_dia[dia] / b.composicao[dia] : 0;
+        const impacto = Math.round(diffDias * horasMediaDia * VALOR_HORA);
+        const plural = Math.abs(diffDias) > 1 ? 's' : '';
+        const verbo = diffDias > 0 ? 'a mais' : 'a menos';
+        justificativas.push({ texto: Math.abs(diffDias) + ' ' + dia + plural + ' ' + verbo, impacto });
+      }
+    });
+
+    const diffFeriados = b.dias_feriado - a.dias_feriado;
+    if (diffFeriados !== 0) {
+      const plural = Math.abs(diffFeriados) > 1 ? 's' : '';
+      const verbo = diffFeriados > 0 ? 'a mais' : 'a menos';
+      justificativas.push({ texto: Math.abs(diffFeriados) + ' feriado' + plural + ' ' + verbo, impacto: 0 });
+    }
+
+    const diffLimiteSos = (b.limite_sos || 0) - (a.limite_sos || 0);
+    if (diffLimiteSos !== 0) {
+      const verboSos = diffLimiteSos > 0 ? 'aumentou' : 'reduziu';
+      const impactoSos = diffLimiteSos * VALOR_HORA;
+      justificativas.push({
+        texto: 'Limite SOS ' + verboSos + ' ' + Math.abs(diffLimiteSos) + 'h ('
+          + (a.limite_sos || 0) + 'h → ' + (b.limite_sos || 0) + 'h)',
+        impacto: impactoSos,
+      });
+    }
+
+    const diffRealizadoSos = (b.realizado_sos || 0) - (a.realizado_sos || 0);
+    if (diffRealizadoSos !== 0) {
+      const verboRealSos = diffRealizadoSos > 0 ? 'aumentou' : 'reduziu';
+      justificativas.push({
+        texto: 'Realizado SOS ' + verboRealSos + ' '
+          + fmtMoeda_(Math.abs(diffRealizadoSos))
+          + ' (' + (a.horas_sos_realizadas || 0) + 'h → ' + (b.horas_sos_realizadas || 0) + 'h)',
+        impacto: diffRealizadoSos,
+      });
+    }
+
+    return justificativas;
+  };
+
+  /**
+   * Gera parágrafo de justificativa completo.
+   * @param {Object}   a
+   * @param {Object}   b
+   * @param {Object[]} justItems
+   * @param {Object[]} altRelacao
+   * @returns {string}
+   */
+  const gerarJustificativaTexto_ = (a, b, justItems, altRelacao) => {
+    const paragrafos = [];
+
+    const deltaTeto = b.teto_valor - a.teto_valor;
+    const deltaHoras = b.total_horas - a.total_horas;
+    const direcaoTeto = deltaTeto > 0 ? 'maior' : (deltaTeto < 0 ? 'menor' : 'igual ao');
+    const direcaoHoras = deltaHoras > 0 ? 'maior' : (deltaHoras < 0 ? 'menor' : 'igual ao');
+
+    if (deltaTeto !== 0) {
+      paragrafos.push(
+        'Em ' + b.nome + ', o teto foi de ' + fmtMoeda_(b.teto_valor) + ', '
+        + fmtMoeda_(Math.abs(deltaTeto)) + ' ' + direcaoTeto + ' que ' + a.nome
+        + ' (' + fmtMoeda_(a.teto_valor) + '). '
+        + 'Essa diferença se deve ao total de horas ser ' + direcaoHoras + ': '
+        + b.total_horas + 'h em ' + b.nome
+        + ' contra ' + a.total_horas + 'h em ' + a.nome + '.'
+      );
+    } else {
+      paragrafos.push(
+        'Em ' + b.nome + ', o teto foi de ' + fmtMoeda_(b.teto_valor)
+        + ', igual ao de ' + a.nome + '.'
+      );
+    }
+
+    const diffItems = justItems.filter((j) => j.impacto !== 0);
+    if (diffItems.length > 0) {
+      const itemTextos = diffItems.map((j) => (
+        j.texto + ' (impacto de ' + (j.impacto > 0 ? '+' : '') + fmtMoeda_(j.impacto) + ')'
+      ));
+      let textoComp = 'A diferença na composição de dias é: ';
+      if (itemTextos.length === 1) {
+        textoComp += itemTextos[0] + '.';
+      } else {
+        textoComp += itemTextos.slice(0, -1).join(', ') + ' e ' + itemTextos[itemTextos.length - 1] + '.';
+      }
+      paragrafos.push(textoComp);
+    }
+
+    const justFeriados = justItems.filter((j) => j.texto.indexOf('feriado') !== -1)[0];
+    if (justFeriados) {
+      paragrafos.push(
+        'Houve ' + justFeriados.texto + ' em dias úteis na vigência de ' + b.nome
+        + ' (' + b.dias_feriado + ') comparado a ' + a.nome + ' (' + a.dias_feriado + ').'
+      );
+    }
+
+    if (altRelacao.length > 0) {
+      let impactoTotal = 0;
+      const usarAlterada = b.qtd_periodos > 1;
+      altRelacao.forEach((alt) => {
+        const qtdDias = usarAlterada
+          ? (b.composicao_alterada[alt.dia_semana] || 0)
+          : (b.composicao[alt.dia_semana] || 0);
+        impactoTotal += alt.diferenca_horas * qtdDias * VALOR_HORA;
+      });
+
+      const mudancaTextos = altRelacao.map((alt) => (
+        capitalizar_(alt.dia_semana) + ': ' + alt.horas_antes + 'h → ' + alt.horas_depois + 'h'
+      ));
+
+      let textoAlt = 'Houve alteração na relação de plantões que afetou ' + b.nome + ': '
+        + mudancaTextos.join(', ') + '. '
+        + 'O impacto estimado dessa alteração é de ' + (impactoTotal > 0 ? '+' : '') + fmtMoeda_(impactoTotal) + '.';
+
+      if (impactoTotal !== 0) {
+        const tetoSemAlteracao = b.teto_valor - impactoTotal;
+        textoAlt += ' Sem essa alteração, o teto de ' + b.nome + ' seria de aproximadamente ' + fmtMoeda_(tetoSemAlteracao) + '.';
+      }
+
+      paragrafos.push(textoAlt);
+    }
+
+    const diffLimiteSos = (b.limite_sos || 0) - (a.limite_sos || 0);
+    const diffRealizadoSos = (b.realizado_sos || 0) - (a.realizado_sos || 0);
+    if (diffLimiteSos !== 0 || diffRealizadoSos !== 0) {
+      let textoSos = 'Em relação ao SOS (banco de horas emergencial): ';
+      const partesSos = [];
+      if (diffLimiteSos !== 0) {
+        const verbLim = diffLimiteSos > 0 ? 'aumentou' : 'reduziu';
+        partesSos.push(
+          'o limite ' + verbLim + ' de ' + (a.limite_sos || 0) + 'h para '
+          + (b.limite_sos || 0) + 'h (impacto de '
+          + (diffLimiteSos > 0 ? '+' : '') + fmtMoeda_(diffLimiteSos * VALOR_HORA) + ')'
+        );
+      }
+      if (diffRealizadoSos !== 0) {
+        const verbReal = diffRealizadoSos > 0 ? 'subiu' : 'caiu';
+        partesSos.push(
+          'o valor realizado de SOS ' + verbReal + ' de '
+          + fmtMoeda_(a.realizado_sos || 0) + ' (' + (a.horas_sos_realizadas || 0) + 'h) para '
+          + fmtMoeda_(b.realizado_sos || 0) + ' (' + (b.horas_sos_realizadas || 0) + 'h)'
+        );
+      }
+      textoSos += partesSos.join('; ') + '.';
+      paragrafos.push(textoSos);
+    }
+
+    return paragrafos.join('\n\n');
+  };
+
+  /**
+   * Monta o objeto de comparação completo a partir de dois blocos de
+   * indicadores — espelho fiel de handleCompararVigencias (backend).
+   *
+   * @param {Object} vigA - Indicadores da vigência A.
+   * @param {Object} vigB - Indicadores da vigência B.
+   * @returns {Object} Mesmo formato de `comparar_vigencias`.
+   */
+  const compararLocal_ = (vigA, vigB) => {
+    const variacoes = [
+      calcularVariacao_('total_dias', vigA.total_dias, vigB.total_dias),
+      calcularVariacao_('dias_uteis', vigA.dias_uteis, vigB.dias_uteis),
+      calcularVariacao_('dias_fds', vigA.dias_fds, vigB.dias_fds),
+      calcularVariacao_('dias_feriado', vigA.dias_feriado, vigB.dias_feriado),
+      calcularVariacao_('total_horas', vigA.total_horas, vigB.total_horas),
+      calcularVariacao_('teto_valor', vigA.teto_valor, vigB.teto_valor),
+      calcularVariacao_('valor_realizado', vigA.realizado_plantoes, vigB.realizado_plantoes),
+      calcularVariacao_('diferenca', vigA.teto_valor - vigA.realizado_plantoes, vigB.teto_valor - vigB.realizado_plantoes),
+      calcularVariacao_('realizado_sos', vigA.realizado_sos, vigB.realizado_sos),
+      calcularVariacao_('teto_sos', vigA.teto_sos, vigB.teto_sos),
+      calcularVariacao_('teto_geral', vigA.teto_geral, vigB.teto_geral),
+      calcularVariacao_('horas_sos', vigA.horas_sos, vigB.horas_sos),
+    ];
+
+    const alteracoesRelacao = detectarAlteracoesRelacao_(vigA, vigB);
+    let impactoRelacao = 0;
+    const usarAlteradaB = vigB.qtd_periodos > 1;
+    alteracoesRelacao.forEach((alt) => {
+      const qtdDias = usarAlteradaB
+        ? (vigB.composicao_alterada[alt.dia_semana] || 0)
+        : (vigB.composicao[alt.dia_semana] || 0);
+      impactoRelacao += alt.diferenca_horas * qtdDias * VALOR_HORA;
+    });
+
+    const justificativas = gerarJustificativas_(vigA, vigB);
+    const justificativaTexto = gerarJustificativaTexto_(vigA, vigB, justificativas, alteracoesRelacao);
+
+    return {
+      vigencia_a: vigA,
+      vigencia_b: vigB,
+      variacoes,
+      justificativas,
+      justificativa_texto: justificativaTexto,
+      alteracoes_relacao: alteracoesRelacao,
+      impacto_relacao: impactoRelacao,
+    };
+  };
+
+  /**
+   * Tenta comparar em memória usando os indicadores semeados pelo
+   * bootstrap. Retorna null se algum bloco não estiver em cache (ou
+   * em erro) — sinalizando ao chamador para cair na rota de rede.
+   *
+   * @returns {Promise<Object|null>}
+   */
+  const compararViaCache_ = async () => {
+    const cache = window.Cache;
+    if (!cache) return null;
+
+    try {
+      const cachedA = await cache.get('indicadores_vigencia', { ano: state.anoA, mes: state.mesA });
+      const cachedB = await cache.get('indicadores_vigencia', { ano: state.anoB, mes: state.mesB });
+      const vigA = cachedA?.data?.data || null;
+      const vigB = cachedB?.data?.data || null;
+      if (!vigA || !vigB) return null;
+      return compararLocal_(vigA, vigB);
+    } catch (err) {
+      console.warn('[Comparacao] cálculo local falhou, usando rede:', err.message);
+      return null;
+    }
+  };
+
   // ─── Data fetching ─────────────────────────────────────
 
   /** @returns {Promise<void>} */
@@ -567,6 +880,17 @@
 
     resultEl.innerHTML = '<div class="prev-loading"><span class="spinner"></span> Comparando vigências...</div>';
 
+    // ── Caminho rápido: computar em memória a partir dos indicadores
+    //    já semeados pelo bootstrap (ZERO requisições). ──
+    const local = await compararViaCache_();
+    if (local) {
+      state.resultado = local;
+      resultEl.innerHTML = renderResultado(local);
+      bindResultEvents();
+      return;
+    }
+
+    // ── Fallback: rota de rede (deploy antigo ou cache incompleto). ──
     const result = await window.Api.request('comparar_vigencias', {
       ano_a: state.anoA,
       mes_a: state.mesA,
