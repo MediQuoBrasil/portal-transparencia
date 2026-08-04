@@ -1281,7 +1281,17 @@
    *
    * Resultado: primeira renderização sem loading na maioria dos casos.
    */
-  const init = async () => {
+  /**
+   * Fluxo legado de inicialização (pré-bootstrap).
+   *
+   * Mantido como fallback para deploys antigos onde a rota `bootstrap`
+   * não existe: prefetch pré-login → init_dashboard → render →
+   * whenFresh → startBackgroundIfUnchanged. Não é mais o caminho
+   * primário; ver `init` abaixo.
+   *
+   * @returns {Promise<void>}
+   */
+  const initLegacyFlow_ = async () => {
     // ── 1. Tentar prefetch pré-login (dados carregados antes do login) ──
     let dashData = null;
 
@@ -1392,6 +1402,149 @@
 
     // ── 4. Fallback: se init_dashboard não existe (deploy antigo) ──
     await initFallback();
+  };
+
+  /**
+   * Renderiza o painel a partir de um payload de dashboard, SEM tocar
+   * a rede. Extraído do fluxo legado para ser reaproveitado tanto no
+   * render instantâneo (cache) quanto no render pós-bootstrap.
+   *
+   * @param {Object|null} dashData - Payload de init_dashboard.data
+   *   ({anos, ano, mes, vigencias, detalhe, teto}).
+   * @returns {boolean} true se renderizou; false se não há anos
+   *   (chamador deve criar o ano inicial).
+   */
+  const renderDashboardData_ = (dashData) => {
+    if (!dashData) return false;
+
+    const { anos, ano, mes, vigencias, detalhe, teto } = dashData;
+    if (!anos || anos.length === 0) return false;
+
+    state.anos = anos;
+    state.anoAtivo = ano;
+    state.vigencias = vigencias || [];
+    state.mesAtivo = mes;
+
+    renderAnos();
+    renderMeses();
+
+    // Header
+    const mesNome = window.AppConfig.MESES[mes - 1] || '';
+    const headerTitle = document.getElementById('mainHeaderTitle');
+    const headerSubtitle = document.getElementById('mainHeaderSubtitle');
+    if (headerTitle) headerTitle.textContent = `${mesNome} ${ano}`;
+    if (headerSubtitle) headerSubtitle.textContent = tooltipVigencia(ano, mes);
+
+    // Fechar sidebar no mobile
+    document.dispatchEvent(new CustomEvent('month-selected'));
+
+    // Detalhe direto do batch (sem round-trip)
+    renderDetalheFromBatch(detalhe, teto, ano, mes);
+    return true;
+  };
+
+  /**
+   * Cria o ano atual quando nenhuma vigência existe ainda, e seleciona-o.
+   * Extraído do fluxo legado.
+   *
+   * @returns {Promise<void>}
+   */
+  const criarAnoInicial_ = async () => {
+    state.anos = [];
+    const anoAtual = new Date().getFullYear();
+    window.UI.showLoading(`Criando ano ${anoAtual}...`);
+
+    const criarResult = await window.Api.request('criar_ano', { ano: anoAtual });
+    window.UI.hideLoading();
+
+    if (criarResult.ok) {
+      state.anos = [anoAtual];
+    }
+    renderAnos();
+    if (state.anos.length > 0) {
+      await selecionarAno(state.anos[0]);
+    }
+  };
+
+  /**
+   * Inicialização (bootstrap-first).
+   *
+   * Estratégia (desempenho §5 — IndexedDB-first):
+   *   1. Render instantâneo a partir do cache persistido, se houver.
+   *   2. 1º acesso (sem cache/sem `since`) → UMA requisição `bootstrap`
+   *      que traz e semeia TODOS os dados no IndexedDB.
+   *   3. Acessos subsequentes → UMA requisição `check_update`:
+   *        • nada mudou  → serve tudo do cache (ZERO requisições de dados);
+   *        • mudou algo  → re-executa `bootstrap`.
+   *
+   * Fallback: sem infra de cache/bootstrap (ou rota ausente em deploy
+   * antigo) → `initLegacyFlow_`.
+   *
+   * @returns {Promise<void>}
+   */
+  const init = async () => {
+    const cache = window.Cache;
+    const prefetch = window.Prefetch;
+
+    // Sem infraestrutura de bootstrap → fluxo legado.
+    if (!cache || !prefetch || !prefetch.runBootstrap) {
+      await initLegacyFlow_();
+      return;
+    }
+
+    // ── 1. Render instantâneo a partir do cache persistido ──
+    const dashCache = await prefetch.getCachedDashboard();
+    if (dashCache) {
+      renderDashboardData_(dashCache);
+    } else {
+      window.UI.showLoading('Carregando painel...');
+    }
+
+    // ── 2. Precisa (re)bootstrap? ──
+    const since = await cache.getSince();
+    let precisaBootstrap = !dashCache || !since;
+
+    if (!precisaBootstrap) {
+      let changed = true;
+      try {
+        const res = await window.Api.checkUpdate(since);
+        changed = res.changed !== false;
+        if (!changed && Number(res.ultima_escrita) > 0) {
+          await cache.setSince(Number(res.ultima_escrita));
+        }
+      } catch (_) {
+        changed = true; // fail-safe: revalida
+      }
+
+      if (!changed) {
+        // Servidor inalterado → cache íntegro. Zero requisições de dados.
+        cache.setAllFresh(true);
+        window.UI.hideLoading();
+        return;
+      }
+      precisaBootstrap = true;
+    }
+
+    // ── 3. Carga única consolidada ──
+    const fresh = await prefetch.runBootstrap();
+    window.UI.hideLoading();
+
+    if (fresh && fresh.dashboard) {
+      const ok = renderDashboardData_(fresh.dashboard);
+      if (!ok) {
+        // Nenhum ano ainda → criar ano inicial.
+        await criarAnoInicial_();
+      }
+      return;
+    }
+
+    // ── 4. Bootstrap indisponível ──
+    if (dashCache) {
+      // Já renderizamos do cache; manter e marcar como fresco.
+      cache.setAllFresh(true);
+      return;
+    }
+    await initLegacyFlow_();
   };
 
   /**
