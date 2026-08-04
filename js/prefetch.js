@@ -733,6 +733,153 @@
     }
   };
 
+  // ─── Bootstrap: semear TODO o cache a partir da carga única ──
+
+  /**
+   * Semeia o IndexedDB com a resposta consolidada do `bootstrap`.
+   *
+   * Cada chave é gravada no MESMO formato `{ok:true, data:<X>}` que
+   * a rede gravaria para a ação correspondente. Isso garante paridade
+   * total: qualquer módulo (Vigências, Relação, SOS, Previsão,
+   * Feriados, Comparação) lê do cache exatamente o que leria da rede.
+   *
+   * Após semear, marca `allFresh=true` e fixa o `since` — assim toda
+   * revalidação subsequente é suprimida até a próxima escrita.
+   *
+   * @param {Object} data - `BootstrapResult.data` do backend.
+   * @returns {Promise<void>}
+   */
+  const seedBootstrap = async (data) => {
+    const cache = window.Cache;
+    if (!cache || !data) return;
+
+    /** @type {Promise<void>[]} */
+    const tasks = [];
+
+    // ── Globais ──────────────────────────────────────────────
+    if (data.dashboard) {
+      tasks.push(cache.set('init_dashboard', {}, { ok: true, data: data.dashboard }));
+    }
+    if (data.relacao) {
+      tasks.push(cache.set('obter_relacao', {}, { ok: true, data: data.relacao }));
+    }
+    tasks.push(cache.set('listar_alteracoes', {}, {
+      ok: true,
+      data: data.alteracoes || { alteracoes: [] },
+    }));
+
+    // ── Por ano ──────────────────────────────────────────────
+    const anosData = data.anos_data || {};
+    Object.keys(anosData).forEach((anoKey) => {
+      const ano = Number(anoKey);
+      const bloco = anosData[anoKey] || {};
+
+      // Detalhes/teto de todas as vigências do ano.
+      // storeAnoDetalhes_ semeia detalhe_completo, detalhe_vigencia,
+      // teto_vigencia e batch_detalhes + registra anosFetched.
+      if (bloco.detalhes && Object.keys(bloco.detalhes).length > 0) {
+        tasks.push(storeAnoDetalhes_(ano, bloco.detalhes));
+      } else {
+        // Sem detalhes mas ainda assim registrar como buscado,
+        // para prefetchAno(ano) early-return e não tocar a rede.
+        state.anosFetched.add(ano);
+      }
+
+      if (Array.isArray(bloco.vigencias)) {
+        tasks.push(cache.set('listar_vigencias', { ano }, {
+          ok: true,
+          data: { vigencias: bloco.vigencias },
+        }));
+      }
+      if (bloco.sos) {
+        tasks.push(cache.set('batch_sos', { ano }, { ok: true, data: bloco.sos }));
+      }
+      if (bloco.previsao) {
+        tasks.push(cache.set('previsao_anual', { ano }, { ok: true, data: bloco.previsao }));
+      }
+      if (data.feriados && data.feriados[ano]) {
+        tasks.push(cache.set('listar_feriados', { ano }, {
+          ok: true,
+          data: data.feriados[ano],
+        }));
+      }
+
+      // Por vigência: relação materializada + indicadores de comparação.
+      const relVig = bloco.relacao_vigencia || {};
+      Object.keys(relVig).forEach((mesKey) => {
+        const mes = Number(mesKey);
+        if (relVig[mesKey]) {
+          tasks.push(cache.set('obter_relacao_vigencia', { ano, mes }, {
+            ok: true,
+            data: relVig[mesKey],
+          }));
+        }
+      });
+
+      const indic = bloco.indicadores || {};
+      Object.keys(indic).forEach((mesKey) => {
+        const mes = Number(mesKey);
+        if (indic[mesKey]) {
+          tasks.push(cache.set('indicadores_vigencia', { ano, mes }, {
+            ok: true,
+            data: indic[mesKey],
+          }));
+        }
+      });
+    });
+
+    await Promise.all(tasks);
+
+    // Tudo em cache e coerente → suprimir revalidações até a próxima escrita.
+    cache.setAllFresh(true);
+    if (Number(data.ultima_escrita) > 0) {
+      await cache.setSince(Number(data.ultima_escrita));
+    }
+  };
+
+  /**
+   * Executa a carga única consolidada e semeia todo o cache.
+   *
+   * @returns {Promise<{dashboard: Object|null, anos: number[], ativo: Object}|null>}
+   *   Resumo para o primeiro render, ou null se o bootstrap falhar
+   *   (deploy antigo / erro de rede) — o chamador cai no fluxo legado.
+   */
+  const runBootstrap = async () => {
+    const Api = window.Api;
+    if (!Api || !Api.bootstrap) return null;
+
+    let result;
+    try {
+      result = await Api.bootstrap();
+    } catch (err) {
+      console.warn('[Prefetch] bootstrap falhou:', err.message);
+      return null;
+    }
+
+    if (!result || !result.ok || !result.data) return null;
+
+    await seedBootstrap(result.data);
+
+    return {
+      dashboard: result.data.dashboard || null,
+      anos: result.data.anos || [],
+      ativo: result.data.ativo || null,
+    };
+  };
+
+  /**
+   * Lê o dashboard persistido no cache (para render instantâneo em
+   * acessos subsequentes, antes de decidir se precisa re-bootstrap).
+   *
+   * @returns {Promise<Object|null>} Payload de init_dashboard.data, ou null.
+   */
+  const getCachedDashboard = async () => {
+    const cache = window.Cache;
+    if (!cache) return null;
+    const cached = await cache.get('init_dashboard', {});
+    return cached?.data?.data || null;
+  };
+
   window.Prefetch = {
     /** @deprecated Mantido por compatibilidade — earlyPreLoginFetch substitui */
     earlyWarmup: earlyPreLoginFetch,
@@ -745,5 +892,8 @@
     whenFresh,
     getState,
     invalidateForUpload,
+    runBootstrap,
+    seedBootstrap,
+    getCachedDashboard,
   };
 })();
