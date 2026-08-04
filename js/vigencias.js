@@ -1496,6 +1496,30 @@
     const dashCache = await prefetch.getCachedDashboard();
     if (dashCache) {
       renderDashboardData_(dashCache);
+
+      // ⚠ Correção multi-cliente: assim que o painel fica interativo com
+      // dados do cache, e ENQUANTO check_update + bootstrap ainda estão em
+      // voo, tratar o IndexedDB como fresco (modo IndexedDB-first).
+      //
+      // Sem isto, `allFresh` fica false durante toda a janela de (re)bootstrap.
+      // Quando OUTRO usuário escreveu, check_update retorna changed:true e essa
+      // janela passa a abranger o bootstrap inteiro (lento — Apps Script é
+      // single-threaded e, logo após uma escrita, o ScriptCache do servidor
+      // está frio). Qualquer navegação nesse intervalo (abas Vigência/Relação/
+      // Feriados, botões SOS/Comparação/Previsão) cai em stale-while-revalidate:
+      // serve o stale E dispara revalidação de rede — reproduzindo exatamente o
+      // comportamento pré-cache (ex.: abrir "Relação" = 3 GET + 3 POST). Pior,
+      // essas revalidações concorrem com o bootstrap no mesmo backend,
+      // atrasando-o e prolongando a degradação (laço de realimentação); é o que
+      // o Network mostra: dezenas de `exec`/`echo` de leitura, várias falhando.
+      //
+      // Marcar fresco aqui mantém as leituras servindo do cache local (zero
+      // rede) até o bootstrap concluir e re-renderizar com dados novos. As
+      // salvaguardas continuam válidas: uma escrita do próprio usuário
+      // (Cache.invalidate) desliga o modo, e um bootstrap bem-sucedido o
+      // reafirma via seedBootstrap. Como `allFresh` é estado em memória, ele
+      // sempre reinicia false no próximo reload — nada persiste desatualizado.
+      cache.setAllFresh(true);
     } else {
       window.UI.showLoading('Carregando painel...');
     }
