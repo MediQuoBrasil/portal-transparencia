@@ -527,51 +527,70 @@
   /**
    * Renderiza o histórico de alterações de limites SOS.
    *
+   * O card é renderizado sempre — inclusive quando não há registros — para
+   * que a seção "Histórico de Alterações" permaneça visível na página. Se
+   * não houver alterações para o ano selecionado, exibe um estado vazio
+   * explícito em vez de ocultar toda a seção (comportamento anterior, que
+   * fazia a seção desaparecer por completo).
+   *
    * @returns {string} HTML.
    */
   const renderHistorico = () => {
     const historicoArr = state.historico && Array.isArray(state.historico.historico)
       ? state.historico.historico
       : [];
-    if (historicoArr.length === 0) return '';
- 
-    const entries = historicoArr;
- 
-    const timelineHtml = entries.map((h) => {
-      const mesNum = parseInt(h.vigencia_id.split('-')[1], 10);
-      const mesNome = MESES_PT[mesNum - 1] || h.vigencia_id;
- 
-      const dataFmt = h.alterado_em
-        ? new Date(h.alterado_em).toLocaleDateString('pt-BR', {
-          day: '2-digit', month: '2-digit', year: 'numeric',
-          hour: '2-digit', minute: '2-digit',
-        })
-        : '';
- 
-      return `
-        <div class="hist-entry">
-          <div class="hist-entry-marker">
-            <span class="hist-entry-dot sos-hist-dot"></span>
-            <span class="hist-entry-line"></span>
-          </div>
-          <div class="hist-entry-content">
-            <div class="hist-entry-date">${window.Utils.escapeHtml(mesNome)}</div>
-            <div class="hist-entry-details">
-              <div class="hist-detail">
-                <span class="hist-detail-dia">Limite SOS</span>
-                <span class="hist-detail-horas">
-                  <span class="hist-horas-ant">${h.limite_anterior}h</span> → <span class="hist-horas-nova">${h.limite_novo}h</span>
-                </span>
-              </div>
-              <div class="sos-hist-meta">
-                ${window.Utils.escapeHtml(h.alterado_por)} · ${dataFmt}
+
+    const badgeTxt = `${historicoArr.length} registro${historicoArr.length !== 1 ? 's' : ''}`;
+
+    /** @type {string} Corpo do card: timeline preenchida ou estado vazio. */
+    let corpoHtml;
+
+    if (historicoArr.length === 0) {
+      corpoHtml = `
+        <div class="sos-detalhe-empty">
+          Nenhuma alteração de limite registrada para ${state.anoAtivo}.
+        </div>
+      `;
+    } else {
+      const timelineHtml = historicoArr.map((h) => {
+        const vigId = String(h.vigencia_id || '');
+        const mesNum = parseInt(vigId.split('-')[1], 10);
+        const mesNome = (mesNum >= 1 && mesNum <= 12) ? MESES_PT[mesNum - 1] : (vigId || '—');
+
+        const dataFmt = h.alterado_em
+          ? new Date(h.alterado_em).toLocaleDateString('pt-BR', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit',
+          })
+          : '';
+
+        return `
+          <div class="hist-entry">
+            <div class="hist-entry-marker">
+              <span class="hist-entry-dot sos-hist-dot"></span>
+              <span class="hist-entry-line"></span>
+            </div>
+            <div class="hist-entry-content">
+              <div class="hist-entry-date">${window.Utils.escapeHtml(mesNome)}</div>
+              <div class="hist-entry-details">
+                <div class="hist-detail">
+                  <span class="hist-detail-dia">Limite SOS</span>
+                  <span class="hist-detail-horas">
+                    <span class="hist-horas-ant">${h.limite_anterior}h</span> → <span class="hist-horas-nova">${h.limite_novo}h</span>
+                  </span>
+                </div>
+                <div class="sos-hist-meta">
+                  ${window.Utils.escapeHtml(h.alterado_por)} · ${dataFmt}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      `;
-    }).join('');
- 
+        `;
+      }).join('');
+
+      corpoHtml = `<div class="hist-timeline">${timelineHtml}</div>`;
+    }
+
     return `
       <div class="card hist-card">
         <div class="hist-card-header">
@@ -584,9 +603,9 @@
             </svg>
             Histórico de Alterações — SOS
           </div>
-          <span class="relacao-total-badge">${entries.length} registro${entries.length !== 1 ? 's' : ''}</span>
+          <span class="relacao-total-badge">${badgeTxt}</span>
         </div>
-        <div class="hist-timeline">${timelineHtml}</div>
+        ${corpoHtml}
       </div>
     `;
   };
