@@ -70,6 +70,10 @@
     listar_feriados: 'ESTAVEL',
     previsao_anual: 'ESTAVEL',
     comparar_vigencias: 'VOLATIL',
+    // Indicadores por vigência (semente da comparação client-side).
+    // Populado pelo bootstrap; lido diretamente por Comparacao para
+    // computar a comparação em memória, sem tocar o Apps Script.
+    indicadores_vigencia: 'ESTAVEL',
     // ─── SOS ──────────────────────────────────────────────
     batch_sos: 'ESTAVEL',
     resumo_sos_anual: 'ESTAVEL',
@@ -83,17 +87,17 @@
    * @type {Object<string, string[]>}
    */
   const INVALIDATION_MAP = {
-    upload_vigencia: ['init_dashboard', 'detalhe_vigencia', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'listar_vigencias', 'obter_relacao_vigencia', 'previsao_anual', 'comparar_vigencias', 'batch_sos', 'resumo_sos_anual'],
-    remover_vigencia: ['init_dashboard', 'detalhe_vigencia', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'listar_vigencias', 'obter_relacao_vigencia', 'previsao_anual', 'comparar_vigencias', 'batch_sos', 'resumo_sos_anual'],
-    salvar_relacao: ['init_dashboard', 'obter_relacao', 'obter_relacao_vigencia', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual'],
-    salvar_relacao_datada: ['init_dashboard', 'obter_relacao', 'obter_relacao_vigencia', 'listar_alteracoes', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual'],
-    remover_alteracao: ['init_dashboard', 'listar_alteracoes', 'obter_relacao_vigencia', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual'],
-    salvar_feriados: ['init_dashboard', 'listar_feriados', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual'],
-    adicionar_feriado: ['init_dashboard', 'listar_feriados', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual'],
-    remover_feriado: ['init_dashboard', 'listar_feriados', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual'],
+    upload_vigencia: ['init_dashboard', 'detalhe_vigencia', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'listar_vigencias', 'obter_relacao_vigencia', 'previsao_anual', 'comparar_vigencias', 'indicadores_vigencia', 'batch_sos', 'resumo_sos_anual'],
+    remover_vigencia: ['init_dashboard', 'detalhe_vigencia', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'listar_vigencias', 'obter_relacao_vigencia', 'previsao_anual', 'comparar_vigencias', 'indicadores_vigencia', 'batch_sos', 'resumo_sos_anual'],
+    salvar_relacao: ['init_dashboard', 'obter_relacao', 'obter_relacao_vigencia', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual', 'comparar_vigencias', 'indicadores_vigencia'],
+    salvar_relacao_datada: ['init_dashboard', 'obter_relacao', 'obter_relacao_vigencia', 'listar_alteracoes', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual', 'comparar_vigencias', 'indicadores_vigencia'],
+    remover_alteracao: ['init_dashboard', 'listar_alteracoes', 'obter_relacao_vigencia', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual', 'comparar_vigencias', 'indicadores_vigencia'],
+    salvar_feriados: ['init_dashboard', 'listar_feriados', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual', 'comparar_vigencias', 'indicadores_vigencia'],
+    adicionar_feriado: ['init_dashboard', 'listar_feriados', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual', 'comparar_vigencias', 'indicadores_vigencia'],
+    remover_feriado: ['init_dashboard', 'listar_feriados', 'detalhe_completo', 'batch_detalhes', 'teto_vigencia', 'previsao_anual', 'comparar_vigencias', 'indicadores_vigencia'],
     criar_ano: ['init_dashboard', 'listar_anos', 'listar_vigencias', 'batch_detalhes'],
     // ─── SOS escrita ─────────────────────────────────────
-    alterar_limite_sos: ['batch_sos', 'resumo_sos_anual', 'obter_limites_sos', 'obter_historico_sos', 'teto_vigencia', 'detalhe_completo', 'batch_detalhes', 'init_dashboard'],
+    alterar_limite_sos: ['batch_sos', 'resumo_sos_anual', 'obter_limites_sos', 'obter_historico_sos', 'teto_vigencia', 'detalhe_completo', 'batch_detalhes', 'init_dashboard', 'comparar_vigencias', 'indicadores_vigencia'],
   };
 
   // ─── Estado ────────────────────────────────────────────────
