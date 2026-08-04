@@ -497,5 +497,64 @@
     return lastResult || { ok: false, error: lastError };
   };
 
-  window.Api = { request, login };
+  /**
+   * Timeout da chamada check_update (ms). Curto: é uma rota pública
+   * ultraleve que retorna apenas um timestamp. Em falha, o chamador
+   * assume changed:true e faz o prefetch normal — nunca bloqueia a UI.
+   * @type {number}
+   */
+  const CHECK_UPDATE_TIMEOUT = 8000;
+
+  /**
+   * Consulta a rota pública `check_update` (Fase A) para saber se houve
+   * alguma escrita no servidor desde o último acesso do cliente.
+   *
+   * Fail-safe: qualquer falha (rede, timeout, deploy antigo sem a rota,
+   * resposta inesperada) resolve como `{ changed: true }`, fazendo o
+   * chamador refazer o prefetch — nunca serve cache desatualizado por
+   * engano. Não usa retry nem token (rota pública, ultraleve).
+   *
+   * @param {number} since - Último `ultima_escrita` visto (epoch ms). 0 no 1º acesso.
+   * @returns {Promise<{changed: boolean, ultima_escrita: number}>}
+   */
+  const checkUpdate = async (since) => {
+    /** @type {AbortController|null} */
+    let controller = null;
+    /** @type {number|null} */
+    let timeoutId = null;
+
+    try {
+      controller = new AbortController();
+      timeoutId = setTimeout(() => { controller.abort(); }, CHECK_UPDATE_TIMEOUT);
+
+      const response = await fetch(window.AppConfig.API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'check_update', since: Number(since) || 0 }),
+        redirect: 'follow',
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      const data = await parseResponse(response, 'check_update');
+
+      // Rota indisponível (deploy antigo) ou resposta inesperada → fail-safe.
+      if (!data || data.ok !== true || !data.data
+        || typeof data.data.changed !== 'boolean') {
+        return { changed: true, ultima_escrita: 0 };
+      }
+
+      return {
+        changed: data.data.changed,
+        ultima_escrita: Number(data.data.ultima_escrita) || 0,
+      };
+    } catch (err) {
+      if (timeoutId) clearTimeout(timeoutId);
+      console.warn('[API][check_update] Falha — assumindo changed:true.', err.message);
+      return { changed: true, ultima_escrita: 0 };
+    }
+  };
+
+  window.Api = { request, login, checkUpdate };
 })();
