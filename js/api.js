@@ -556,5 +556,19 @@
     }
   };
 
-  window.Api = { request, login, checkUpdate };
+  /**
+   * Dispara a carga única consolidada (rota autenticada `bootstrap`).
+   *
+   * Bypassa o cache de propósito: é a ÚNICA requisição de dados do
+   * 1º acesso (ou de um acesso pós-escrita) e sua resposta é usada
+   * para semear todas as chaves de leitura do IndexedDB. Não é
+   * cacheada sob a própria ação `bootstrap`.
+   *
+   * @returns {Promise<ApiEnvelope>} Envelope `{ok, data}` do backend.
+   *   Em falha de rede/deploy antigo, `fetchFromNetwork` já devolve
+   *   `{ok:false, ...}` — o chamador cai para o fluxo legado.
+   */
+  const bootstrap = () => fetchFromNetwork('bootstrap', {});
+
+  window.Api = { request, login, checkUpdate, bootstrap };
 })();
