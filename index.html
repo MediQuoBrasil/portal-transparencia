@@ -271,9 +271,10 @@
   <!-- Cache (IndexedDB) carrega primeiro — necessário para
        o prefetch armazenar dados pré-login persistentemente -->
   <script src="js/cache.js"></script>
-  <!-- Prefetch dispara fetch público IMEDIATAMENTE ao carregar:
-       busca dados da vigência atual ANTES do login Google.
-       Resultado armazenado no IndexedDB pelo cache.js acima. -->
+  <!-- Prefetch dispara um ping LEVE de aquecimento IMEDIATAMENTE ao
+       carregar: aquece o backend (tira o cold-start do caminho do login)
+       em paralelo à interação do usuário com o Google Sign In. O prefetch
+       pesado de dados roda só APÓS o login, para não competir com ele. -->
   <script src="js/prefetch.js"></script>
   <script src="js/api.js"></script>
   <script src="js/ui.js"></script>
@@ -312,7 +313,7 @@
               console.error('[Boot] Google Identity Services não carregou após timeout.');
               const loginError = document.getElementById('loginError');
               if (loginError) {
-                loginError.textContent = 'Erro ao carregar serviço de autenticação. Recarregue a página.';
+                loginError.textContent = 'Falha na sua rede. Tente novamente.';
                 loginError.classList.add('show');
               }
             }
