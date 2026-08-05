@@ -20,6 +20,13 @@
    * @property {string}   role   - Papel (admin | gestor | financeiro)
    */
 
+  /**
+   * Mensagem única de falha de comunicação exibida ao usuário no login.
+   * Igual à usada na camada Api — nenhum detalhe técnico chega à UI.
+   * @type {string}
+   */
+  const MSG_REDE = 'Falha na sua rede. Tente novamente.';
+
   /** @type {HTMLElement} */
   let loginScreen;
 
@@ -126,17 +133,14 @@
       });
 
       if (!result.ok) {
-        // Mensagem baseada no contexto retornado pelo parseResponse
-        let msg;
-        if (result.code === 403) {
-          msg = result.error || 'O Google exige reautorização. Contate o administrador.';
-        } else if (result.code === 404) {
-          msg = 'Servidor indisponível (deploy desatualizado). Contate o administrador.';
-        } else if (result.code === 401) {
-          msg = result.error || 'Acesso não autorizado. Verifique se seu e-mail está cadastrado.';
-        } else {
-          msg = result.error || 'Erro ao conectar ao servidor. Tente novamente.';
-        }
+        // 401 = autorização (e-mail não cadastrado ou token rejeitado):
+        // mantém mensagem específica e acionável — do contrário o usuário
+        // legitimamente bloqueado ficaria retentando "rede" sem fim.
+        // Todo o restante (rede, timeout, deploy, auth wall, 404, 5xx) já
+        // chega normalizado da camada Api como falha de rede.
+        const msg = result.code === 401
+          ? (result.error || 'Acesso não autorizado. Verifique se seu e-mail está cadastrado.')
+          : MSG_REDE;
 
         showLoginError(msg);
         return;
@@ -157,7 +161,7 @@
       window.App.init(result.data);
     } catch (err) {
       console.error('[Auth] Exceção inesperada no login:', err);
-      showLoginError('Erro ao processar login. Tente novamente.');
+      showLoginError(MSG_REDE);
     } finally {
       if (loadingOverlay) loadingOverlay.classList.remove('show');
     }
@@ -188,7 +192,7 @@
    */
   const triggerGoogleSignIn = () => {
     if (!window.google || !window.google.accounts || !window.google.accounts.id) {
-      showLoginError('Google Sign In não disponível. Recarregue a página.');
+      showLoginError(MSG_REDE);
       return;
     }
 
@@ -267,8 +271,9 @@
 
     if (session) {
       // Sessão existente — inicializar direto.
-      // Warmup já foi disparado automaticamente pelo prefetch.js
-      // no carregamento do script (antes do GIS e antes deste init).
+      // O ping leve de aquecimento já foi disparado pelo prefetch.js
+      // no carregamento do script (antes do GIS e antes deste init),
+      // deixando o backend quente para as primeiras requisições.
       loginScreen.style.display = 'none';
       window.App.init({
         email: session.email,
@@ -277,8 +282,9 @@
       });
     } else {
       // Sem sessão — exibir login.
-      // Warmup já foi disparado no carregamento do prefetch.js,
-      // então o backend estará quente quando o login completar.
+      // O ping leve de aquecimento foi disparado no carregamento do
+      // prefetch.js e roda em paralelo enquanto o usuário interage com
+      // o Google Sign In, tirando o cold-start do caminho do login.
       loginScreen.style.display = '';
     }
   };
