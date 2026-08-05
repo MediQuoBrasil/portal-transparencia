@@ -25,6 +25,16 @@
    */
 
   /**
+   * Mensagem única exibida ao usuário em QUALQUER falha de comunicação
+   * com o backend (timeout, rede, deploy desatualizado, HTML/404, auth
+   * wall do Google, formato inesperado). Detalhes técnicos permanecem
+   * apenas nos logs (console) — nunca são expostos na UI. Centralizada
+   * aqui para consistência e para não vazar detalhes internos ao usuário.
+   * @type {string}
+   */
+  const MSG_REDE = 'Falha na sua rede. Tente novamente.';
+
+  /**
    * Número máximo de retries para erros transitórios.
    * @type {number}
    */
@@ -143,7 +153,7 @@
   const fetchFromNetwork = async (action, payload = {}) => {
     const token = getToken();
     const body = { action, token, ...payload };
-    let lastError = 'Erro de conexão com o servidor.';
+    let lastError = MSG_REDE;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
       /** @type {AbortController|null} */
@@ -178,12 +188,10 @@
 
         const isAbort = err.name === 'AbortError';
         const isNetwork = err instanceof TypeError;
-        lastError = isAbort
-          ? 'O servidor demorou demais para responder.'
-          : (err.message || 'Falha na comunicação.');
+        // Usuário sempre vê a mensagem única; o detalhe fica só no log.
+        lastError = MSG_REDE;
 
         console.error(`[API] Tentativa ${attempt + 1} (${action}) falhou:`, {
-          error: lastError,
           type: err.name,
           isAbort,
           isNetwork,
@@ -315,7 +323,7 @@
       console.error(`[API][${context}] Erro ao ler body:`, readErr.message);
       return {
         ok: false,
-        error: 'Não foi possível ler a resposta do servidor.',
+        error: MSG_REDE,
         code: status,
         _debug: { phase: 'body_read', readError: readErr.message },
       };
@@ -359,8 +367,7 @@
     if (isGoogleError) {
       return {
         ok: false,
-        error: 'O Google exige reautorização do Apps Script. '
-          + 'Abra o editor do script, execute qualquer função manualmente e re-autorize.',
+        error: MSG_REDE,
         code: 403,
         _debug: { phase: 'google_auth_wall', status, contentType },
       };
@@ -369,8 +376,7 @@
     if (is404Page) {
       return {
         ok: false,
-        error: 'O servidor retornou página de erro (404). '
-          + 'O deploy do Apps Script pode estar desatualizado.',
+        error: MSG_REDE,
         code: 404,
         _debug: { phase: 'not_found', status, contentType },
       };
@@ -379,8 +385,7 @@
     if (isHtml) {
       return {
         ok: false,
-        error: `O servidor retornou HTML em vez de JSON (HTTP ${status}). `
-          + 'Possível erro no deploy do Apps Script.',
+        error: MSG_REDE,
         code: status,
         _debug: { phase: 'html_response', status, contentType, preview },
       };
@@ -388,7 +393,7 @@
 
     return {
       ok: false,
-      error: `Resposta inesperada do servidor (HTTP ${status}, tipo: ${contentType || 'vazio'}).`,
+      error: MSG_REDE,
       code: status,
       _debug: { phase: 'unknown_format', status, contentType, preview },
     };
@@ -412,7 +417,7 @@
    */
   const login = async (idToken) => {
     const body = JSON.stringify({ action: 'login', token: idToken });
-    let lastError = 'Falha na comunicação com o servidor.';
+    let lastError = MSG_REDE;
     /** @type {ApiResult|null} */
     let lastResult = null;
 
@@ -475,15 +480,14 @@
 
         const isAbort = err.name === 'AbortError';
         const isNetwork = err instanceof TypeError;
-        lastError = isAbort
-          ? 'O servidor demorou demais. Tente novamente.'
-          : (err.message || 'Falha na comunicação com o servidor.');
+        // Usuário sempre vê a mensagem única; o detalhe fica só no log.
+        lastError = MSG_REDE;
 
         console.error(`[API][login] Tentativa ${attempt + 1} exceção:`, {
-          error: lastError,
           type: err.name,
           isAbort,
           isNetwork,
+          message: err.message,
         });
       }
 
