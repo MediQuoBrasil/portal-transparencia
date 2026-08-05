@@ -100,7 +100,60 @@
    */
   const PRE_LOGIN_TIMEOUT = 10000;
 
+  /**
+   * Timeout do ping de aquecimento pré-login (ms). Curto: o ping é
+   * ultraleve (o backend responde ANTES de qualquer leitura de planilha,
+   * em `doPost`), então não há motivo para esperar muito. Em falha ou
+   * timeout não há prejuízo — o aquecimento é best-effort e o login
+   * segue seu próprio fluxo de timeout/retry.
+   * @type {number}
+   */
+  const WARMUP_PING_TIMEOUT = 8000;
+
   // ─── Helpers ─────────────────────────────────────────────────
+
+  /**
+   * Dispara um ping ultraleve ao backend para AQUECER o caminho `doPost`
+   * (dispatch + runtime + bundle) enquanto o usuário interage com o
+   * Google Sign In, tirando o cold-start do caminho crítico do login.
+   *
+   * Racional (Framework de Decisão): o gargalo do 1º login é o cold-start
+   * do runtime Apps Script (~0,8–2s) somado à validação de token via rede.
+   * O usuário gasta alguns segundos no One Tap / consentimento; essa janela
+   * ociosa é gratuita e é usada para aquecer a MESMA instância que o POST de
+   * login vai atingir. Quando o callback de credencial chama `Api.login()`,
+   * o runtime já está quente → o login evita o cold-start.
+   *
+   * Por que é seguro (diferente do prefetch pesado, desabilitado): a rota
+   * `ping` retorna `{pong:true}` ANTES de qualquer leitura de planilha
+   * (custo desprezível) e conclui muito antes do POST de login chegar — não
+   * enfileira execução concorrente na fila single-threaded do backend, que
+   * foi exatamente o que fez os prefetches pesados quebrarem o login.
+   *
+   * Fire-and-forget: qualquer falha é silenciosa (best-effort). `keepalive`
+   * garante que o ping sobreviva mesmo se a navegação prosseguir.
+   *
+   * @returns {void}
+   * @private
+   */
+  const warmupPing_ = () => {
+    const apiUrl = window.AppConfig?.API_URL;
+    if (!apiUrl || apiUrl.includes('SEU_DEPLOY_ID')) return;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => { controller.abort(); }, WARMUP_PING_TIMEOUT);
+
+    fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'ping' }),
+      redirect: 'follow',
+      signal: controller.signal,
+      keepalive: true,
+    })
+      .then(() => { clearTimeout(timeoutId); })
+      .catch(() => { clearTimeout(timeoutId); });
+  };
 
   /**
    * POST público (sem token) ao backend.
@@ -396,13 +449,19 @@
    */
   const whenFresh = () => state.freshPromise;
 
-  // ⚠ earlyPreLoginFetch() NÃO dispara mais no carregamento do script.
-  // O backend Apps Script é single-threaded: as 2 chamadas pesadas
-  // de prefetch público (prefetch_publico + prefetch_publico_ano)
-  // saturavam a fila de execução, fazendo o login subsequente
-  // expirar por timeout. O fluxo pós-login (Vigencias.init →
-  // init_dashboard → startBackground) já cobre todo o carregamento
-  // de dados sem concorrer com o login.
+  // ⚠ earlyPreLoginFetch() (prefetch PESADO) NÃO dispara no carregamento.
+  // O backend Apps Script é single-threaded: as 2 chamadas pesadas de
+  // prefetch público (prefetch_publico + prefetch_publico_ano) saturavam a
+  // fila de execução, fazendo o login subsequente expirar por timeout. O
+  // fluxo pós-login (Vigencias.init → init_dashboard → startBackground) já
+  // cobre todo o carregamento de dados sem concorrer com o login.
+  //
+  // O que roda no lugar: apenas um ping LEVE de aquecimento. Ele tira o
+  // cold-start do runtime do caminho crítico do login SEM ler planilha nem
+  // enfileirar execução concorrente (a rota `ping` responde antes de
+  // qualquer leitura). Dispara imediatamente, em paralelo à interação do
+  // usuário com o Google Sign In.
+  warmupPing_();
 
   // ─── Single-flight: aguardar prefetch em voo ─────────────────
 
